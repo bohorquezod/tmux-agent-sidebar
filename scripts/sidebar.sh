@@ -241,9 +241,12 @@ render() {
 
   local W; W=$($TMUXBIN display-message -t "$PANE_ID" -p '#{pane_width}' 2>/dev/null)
   [[ -z "$W" ]] && W=28
-  # Persiste el ancho actual para que nuevas ventanas abran el sidebar al mismo ancho
-  local _sw; _sw=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-  [[ "$W" != "$_sw" ]] && printf '%s' "$W" > "${STATE_DIR}/sidebar_width"
+  # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho
+  local _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
+  local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+  [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+  local _sw; _sw=$(cat "$_width_f" 2>/dev/null)
+  [[ "$W" != "$_sw" ]] && printf '%s' "$W" > "$_width_f"
   local max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
 
@@ -658,8 +661,14 @@ _exec_cmd() {
 _ensure_sidebar() {
   local _dest="$1"
   local _server="tmux-agent-sidebar" _session="sidebar"
-  local _sw; _sw=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-  [[ -z "$_sw" || ! "$_sw" =~ ^[0-9]+$ ]] && _sw=28
+  local _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
+  local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+  [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+  local _sw; _sw=$(cat "$_width_f" 2>/dev/null)
+  if [[ -z "$_sw" || ! "$_sw" =~ ^[0-9]+$ ]]; then
+    _sw=$("${OUTER_TMUX[@]}" show-option -gqv @agent-sidebar-width 2>/dev/null)
+    [[ -z "$_sw" || ! "$_sw" =~ ^[0-9]+$ ]] && _sw=28
+  fi
 
   local _live; _live=$("${OUTER_TMUX[@]}" list-panes -t "$_dest" \
     -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
