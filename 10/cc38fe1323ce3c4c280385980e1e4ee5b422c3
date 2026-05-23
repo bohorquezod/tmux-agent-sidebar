@@ -1,0 +1,19 @@
+README.md
+  s_fd14966ac2f78b::t_87e85055b88fb8 46-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "10cc38fe1323ce3c4c280385980e1e4ee5b422c3",
+  "prompts": {},
+  "sessions": {
+    "s_fd14966ac2f78b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6ae7df0-4570-4fe0-99cb-87db2d0ce599",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
