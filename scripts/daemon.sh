@@ -8,6 +8,7 @@ export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 DATA_FILE="${STATE_DIR}/data"
+SUMMARY_FILE="${STATE_DIR}/summary"
 DIRTY_FILE="${STATE_DIR}/dirty"
 PID_FILE="${STATE_DIR}/daemon.pid"
 CLIENTS_DIR="${STATE_DIR}/clients"
@@ -202,6 +203,39 @@ build_data() {
   mv "${DATA_FILE}.tmp" "$DATA_FILE"
 }
 
+# ── Build summary token ───────────────────────────────────────────────────────
+# Escribe ${STATE_DIR}/summary con conteos compactos de estado de agentes.
+# También actualiza la user-option @agent_sidebar_summary en el servidor actual
+# para que el usuario pueda referenciarla con #{@agent_sidebar_summary}.
+
+build_summary() {
+  local _working=0 _idle=0 _unread=0
+  local _type _server _sess _widx _wname _icon _islast _f
+
+  if [[ -f "$DATA_FILE" ]]; then
+    while IFS='|' read -r _type _server _sess _widx _wname _icon _islast; do
+      [[ "$_type" == "W" ]] || continue
+      [[ "$_icon" == "⚡" ]] && (( _working++ ))
+      [[ "$_icon" == "⏸" ]] && (( _idle++ ))
+    done < "$DATA_FILE"
+  fi
+
+  for _f in "$STATE_DIR"/*.unread; do
+    [[ -f "$_f" ]] && (( _unread++ ))
+  done
+
+  local _token=""
+  [[ $_working -gt 0 ]] && _token+="⚡${_working} "
+  [[ $_idle    -gt 0 ]] && _token+="⏸${_idle} "
+  [[ $_unread  -gt 0 ]] && _token+="◉${_unread} "
+  _token="${_token% }"
+
+  printf '%s' "$_token" > "${SUMMARY_FILE}.tmp"
+  mv "${SUMMARY_FILE}.tmp" "$SUMMARY_FILE"
+
+  $TMUXBIN set-option -gq @agent_sidebar_summary "$_token" 2>/dev/null || true
+}
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 has_clients() {
@@ -219,7 +253,7 @@ while true; do
   _SB=false
   [[ -f "$DIRTY_FILE" ]] && { rm -f "$DIRTY_FILE"; _SB=true; }
   (( SECONDS - LAST_BUILD >= 2 )) && _SB=true
-  [[ "$_SB" == true ]] && { build_data; LAST_BUILD=$SECONDS; }
+  [[ "$_SB" == true ]] && { build_data; build_summary; LAST_BUILD=$SECONDS; }
   has_clients || exit 0
   sleep 0.3
 done
