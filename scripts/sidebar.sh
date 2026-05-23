@@ -603,9 +603,6 @@ _exec_cmd() {
   else
     return
   fi
-  printf 'exec_cmd: c=%s snum=%s wnum=%s items=%d\n' "$_c" "$_snum" "$_wnum" "${#ITEMS_FLAT[@]}" >> /tmp/sidebar_debug.log
-  local _di=0; for _dit in "${ITEMS_FLAT[@]}"; do printf '  [%d] %s\n' "$_di" "$_dit" >> /tmp/sidebar_debug.log; ((_di++)); done
-
   # Encontrar la sesión en posición ordinal _snum
   local _n=0 _ii=0 _si=-1
   for _it in "${ITEMS_FLAT[@]}"; do
@@ -637,6 +634,7 @@ _exec_cmd() {
     local _wsess="${_wr2%%|*}"
     local _wid="${_wr2#*|}"
     SELECTED=$_wfound
+    CURSOR_ITEM="${ITEMS_FLAT[$_wfound]}"
     jump_to "${_wsrv}|${_wsess}|${_wid}"
     [[ "$_wsrv" == "$OUTER_SERVER" ]] && printf '%s' "$_wsess" > "${STATE_DIR}/current_session"
     printf '%s' "${_wsrv}|${_wsess}:${_wid}" > "${STATE_DIR}/just_visited"
@@ -644,6 +642,7 @@ _exec_cmd() {
     $TMUXBIN send-keys -t "$PANE_ID" $'\x1e' 2>/dev/null
   else
     SELECTED=$_si
+    CURSOR_ITEM="${ITEMS_FLAT[$_si]}"
     jump_to "${_ssrv}|${_ssess}"
     [[ "$_ssrv" == "$OUTER_SERVER" ]] && printf '%s' "$_ssess" > "${STATE_DIR}/current_session"
     # Encontrar ventana activa de la sesión destino
