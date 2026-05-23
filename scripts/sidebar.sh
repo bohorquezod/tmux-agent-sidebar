@@ -107,6 +107,7 @@ ITEMS_FLAT=()
 SELECTED=0
 CURSOR_ITEM=""
 _INITIAL_SELECT=1   # posicionar cursor en sesión actual al primer render
+PREVIEW_MODE=0      # p: toggle preview del pane bajo el cursor (off por defecto)
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
@@ -582,9 +583,33 @@ render() {
 
   [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
   buf+="${GR}${sep}${R}"$'\n'
+
+  # ── Área de preview ────────────────────────────────────────────────────────
+  if [[ "$PREVIEW_MODE" == "1" ]]; then
+    local _pitem="${ITEMS_FLAT[$SELECTED]:-}"
+    if [[ "${_pitem%%|*}" == "W" ]]; then
+      local _pr="${_pitem#*|}"
+      local _psrv="${_pr%%|*}"
+      local _pr2="${_pr#*|}"
+      local _psess="${_pr2%%|*}"
+      local _pwidx="${_pr2#*|}"
+      local _pkey="${_psrv//[^a-zA-Z0-9_-]/_}_${_psess//[^a-zA-Z0-9_-]/_}_${_pwidx}"
+      local _cap_file="${STATE_DIR}/captures/${_pkey}"
+      local _preview_lines _pl
+      _preview_lines=$(tail -n 10 "$_cap_file" 2>/dev/null)
+      if [[ -n "$_preview_lines" ]]; then
+        while IFS= read -r _pl || [[ -n "$_pl" ]]; do
+          if [[ ${#_pl} -gt $W ]]; then _pl="${_pl:0:$(( W - 1 ))}…"; fi
+          buf+="${GR}${_pl}${R}"$'\n'
+          mapbuf+=$'\n'
+        done <<< "$_preview_lines"
+      fi
+    fi
+  fi
+
   buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
   buf+="${GR} [jk]nav [JK]mv [↵]go${R}"$'\n'
-  buf+="${GR} [hl]mode [r]↺ [q]✕${R}"$'\n'
+  buf+="${GR} [hl]mode [p]👁 [r]↺ [q]✕${R}"$'\n'
   mapbuf+=$'\n\n\n'
 
   printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
@@ -829,6 +854,9 @@ handle_key() {
         printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
       fi ;;
 
+
+    p)
+      if [[ "$PREVIEW_MODE" == "0" ]]; then PREVIEW_MODE=1; else PREVIEW_MODE=0; fi ;;
 
     q|Q)
       if [[ -n "$OUTER_TMUX_SOCKET" ]]; then

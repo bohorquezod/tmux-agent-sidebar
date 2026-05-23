@@ -11,9 +11,10 @@ DATA_FILE="${STATE_DIR}/data"
 DIRTY_FILE="${STATE_DIR}/dirty"
 PID_FILE="${STATE_DIR}/daemon.pid"
 CLIENTS_DIR="${STATE_DIR}/clients"
+CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
 
-mkdir -p "$STATE_DIR" "$CLIENTS_DIR"
+mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
 # El PID se guarda DENTRO del lock dir para eliminar la ventana de race entre
@@ -188,6 +189,9 @@ build_data() {
 
         local _lines="" _ck="${_capid//[^a-zA-Z0-9]/_}"
         [[ -n "$_capid" && -f "$_tmpdir/${_server}_${_ck}" ]] && _lines=$(<"$_tmpdir/${_server}_${_ck}")
+
+        local _cap_key="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+        printf '%s' "$_lines" > "${CAPTURES_DIR}/${_cap_key}"
 
         local _icon; _icon=$(detect_icon "$_capcmd" "$_lines" "$_captitle")
         local _islast=0; (( _wj + 1 >= _wtotal )) && _islast=1
