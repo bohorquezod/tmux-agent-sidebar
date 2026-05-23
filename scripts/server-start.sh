@@ -1,0 +1,40 @@
+#!/bin/bash
+# server-start.sh — garantiza que el sidebar server tmux-agent-sidebar está corriendo
+# Idempotente: puede llamarse múltiples veces sin efecto secundario
+
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
+CLIENTS_DIR="${STATE_DIR}/clients"
+SERVER="tmux-agent-sidebar"
+SESSION="sidebar"
+OUTER_SOCKET="${TMUX%%,*}"
+
+mkdir -p "$STATE_DIR" "$CLIENTS_DIR"
+
+# 1. Arrancar daemon en el contexto del outer server (hereda $TMUX del outer server)
+_dpid_file="${STATE_DIR}/daemon.pid"
+if [[ ! -f "$_dpid_file" ]] || ! kill -0 "$(<"$_dpid_file")" 2>/dev/null; then
+  nohup bash "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
+  _i=0
+  while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do sleep 0.1; ((_i++)); done
+fi
+
+# 2. Si el sidebar server ya tiene la sesión activa: nada que hacer
+$TMUXBIN -L "$SERVER" has-session -t "$SESSION" 2>/dev/null && exit 0
+
+# 3. Determinar ancho inicial
+WIDTH=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
+[[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]] && WIDTH=28
+
+# 4. Crear sesión en sidebar server con config vacía (sin ~/.tmux.conf, sin plugins)
+$TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y 50 \
+  -e "OUTER_TMUX_SOCKET=$OUTER_SOCKET" \
+  -e "PLUGIN_DIR=$PLUGIN_DIR" \
+  -e "STATE_DIR=$STATE_DIR" \
+  "exec bash $PLUGIN_DIR/scripts/sidebar.sh"
+
+# 5. Configurar sidebar server: sin status bar, sin prefix, sin mouse
+$TMUXBIN -L "$SERVER" set-option -g status off
+$TMUXBIN -L "$SERVER" set-option -g prefix None
+$TMUXBIN -L "$SERVER" set-option -g mouse off
