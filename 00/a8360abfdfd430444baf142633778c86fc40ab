@@ -1,0 +1,21 @@
+docs/research-nested-server.md
+  s_b9ecf6a9bd29a7::t_01182afb38d52d 1-180
+scripts/sidebar-flat.sh
+  s_b9ecf6a9bd29a7::t_bf692436a0f890 1-667
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "00a8360abfdfd430444baf142633778c86fc40ab",
+  "prompts": {},
+  "sessions": {
+    "s_b9ecf6a9bd29a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9d3a843a-030b-4e2b-9eb0-5fa9a2fde136",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
