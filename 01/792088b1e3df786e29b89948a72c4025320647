@@ -1,0 +1,21 @@
+scripts/daemon.sh
+  s_9a9e12761db7db::t_b0f69a16933be6 217-219,223-240,242
+tmux-agent-sidebar.tmux
+  s_9a9e12761db7db::t_d9980c29d667c4 10-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "01792088b1e3df786e29b89948a72c4025320647",
+  "prompts": {},
+  "sessions": {
+    "s_9a9e12761db7db": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "228146cc-018d-4f2e-b10d-50bb047865f3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
