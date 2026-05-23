@@ -1,0 +1,26 @@
+tmux-agent-sidebar.tmux
+  ai_agent 27-31
+scripts/sidebar.sh
+  s_052f4d3c290acf::t_20bbf8e0b70470 654,656,664,666
+  s_052f4d3c290acf::t_926f9518bee752 852-854
+  s_052f4d3c290acf::t_1e9144385c1518 812,820-821
+  s_052f4d3c290acf::t_a04c766b6bb91f 23,26-33
+  s_052f4d3c290acf::t_192831a015219f 825,847-848
+  s_052f4d3c290acf::t_ba4be6348bef2c 592-598
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "c4a1d0b1424cf53215ba3124069407f31ffa13d2",
+  "prompts": {},
+  "sessions": {
+    "s_052f4d3c290acf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ef5e7590-643a-4ce7-80f9-c0f8a2430fcc",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
