@@ -43,6 +43,53 @@ Después `prefix+I`.
 
 Los números ordinales (`1`, `2.3`, etc.) activan el command buffer para navegar directamente a una sesión o ventana.
 
+## Status bar token
+
+El plugin expone un token compacto con conteos de actividad de agentes para
+integrar en el `status-right` (u otro componente) del status bar de tmux.
+
+**Formato**: `⚡N ⏸N ◉N` — los conteos de cero se omiten.
+
+| Símbolo | Significado        |
+| ------- | ------------------ |
+| `⚡N`   | N agentes working  |
+| `⏸N`   | N agentes idle     |
+| `◉N`   | N ventanas unread  |
+
+Ejemplos de output: `⚡2 ⏸1`, `⏸3 ◉1`, `⚡1` (vacío cuando no hay agentes activos).
+
+### Opción 1 — `#{@agent_sidebar_summary}` (recomendada)
+
+El daemon actualiza automáticamente la user-option `@agent_sidebar_summary` en
+el servidor tmux principal cada vez que refresca los datos (~0.3 s). Agregar al
+`~/.tmux.conf`:
+
+```tmux
+set -g status-right "#{@agent_sidebar_summary} %H:%M"
+```
+
+No requiere ningún subshell; tmux lee la opción directamente.
+
+### Opción 2 — archivo de estado
+
+El daemon escribe `${TMPDIR:-/tmp}/agent-sidebar/summary` en cada ciclo.
+Cualquier componente puede leerlo:
+
+```tmux
+set -g status-right "#(cat ${TMPDIR:-/tmp}/agent-sidebar/summary) %H:%M"
+```
+
+### Opción 3 — script standalone
+
+Útil si se quiere usar el token sin tener el sidebar abierto:
+
+```tmux
+set -g status-right "#(~/path/to/tmux-agent-sidebar/scripts/summary.sh) %H:%M"
+```
+
+`scripts/summary.sh` lee el data file del daemon directamente y no requiere
+conexión con ningún proceso adicional.
+
 ## Actualizaciones
 
 Los plugins no se actualizan automáticamente.
