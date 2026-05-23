@@ -43,6 +43,30 @@ Después `prefix+I`.
 
 Los números ordinales (`1`, `2.3`, etc.) activan el command buffer para navegar directamente a una sesión o ventana.
 
+## Configuración
+
+Todas las opciones son opcionales. Agregalas en `~/.tmux.conf` antes de cargar el plugin.
+
+| Opción                             | Default | Descripción                                                                          |
+| ---------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `@agent-sidebar-toggle-key`        | `m`     | Tecla para abrir/cerrar/enfocar el sidebar (`prefix + <key>`). Vacío = deshabilitar. |
+| `@agent-sidebar-reload-key`        | `M`     | Tecla para recargar el sidebar (`prefix + <key>`). Vacío = deshabilitar.             |
+| `@agent-sidebar-width`             | `28`    | Ancho inicial del sidebar en columnas.                                               |
+| `@agent-sidebar-hidden-sessions`   | `""`    | Sesiones a ocultar del sidebar (separadas por espacios).                             |
+| `@agent-sidebar-refresh-interval`  | `2`     | Intervalo en segundos entre actualizaciones del daemon.                              |
+
+### Ejemplo
+
+```tmux
+set -g @agent-sidebar-toggle-key    "s"
+set -g @agent-sidebar-reload-key    "S"
+set -g @agent-sidebar-width         "35"
+set -g @agent-sidebar-hidden-sessions "scratch temp"
+set -g @agent-sidebar-refresh-interval "3"
+
+run-shell '~/ruta/a/tmux-agent-sidebar/tmux-agent-sidebar.tmux'
+```
+
 ## Status bar token
 
 El plugin expone un token compacto con conteos de actividad de agentes para
@@ -89,7 +113,6 @@ set -g status-right "#(~/path/to/tmux-agent-sidebar/scripts/summary.sh) %H:%M"
 
 `scripts/summary.sh` lee el data file del daemon directamente y no requiere
 conexión con ningún proceso adicional.
-
 ## Actualizaciones
 
 Los plugins no se actualizan automáticamente.

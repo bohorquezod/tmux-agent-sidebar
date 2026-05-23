@@ -6,6 +6,23 @@ STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 DIRTY_FILE="$STATE_DIR/dirty"
 mkdir -p "$STATE_DIR"
 
+# Leer opciones @agent-sidebar-* con fallback a defaults
+_toggle_key=$(tmux show-option -gqv @agent-sidebar-toggle-key   2>/dev/null)
+_reload_key=$(tmux show-option  -gqv @agent-sidebar-reload-key  2>/dev/null)
+_width=$(tmux show-option       -gqv @agent-sidebar-width       2>/dev/null)
+_hidden=$(tmux show-option      -gqv @agent-sidebar-hidden-sessions 2>/dev/null)
+_interval=$(tmux show-option    -gqv @agent-sidebar-refresh-interval 2>/dev/null)
+
+[[ -z "$_toggle_key" ]] && _toggle_key="m"
+[[ -z "$_reload_key"  ]] && _reload_key="M"
+[[ "$_width" =~ ^[0-9]+$ ]]    || _width="28"
+[[ "$_interval" =~ ^[0-9]+$ ]] || _interval="2"
+
+# Persistir en state dir para que daemon, sidebar y scripts los lean sin acceso al outer server
+printf '%s' "$_width"    > "${STATE_DIR}/sidebar_width"
+printf '%s' "$_hidden"   > "${STATE_DIR}/hidden_sessions"
+printf '%s' "$_interval" > "${STATE_DIR}/refresh_interval"
+
 # Registrar hooks solo una vez por servidor tmux (evita duplicados al hacer source-file)
 if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "2" ]; then
   tmux set-option -g @claude_sidebar_hooks "2"
@@ -19,10 +36,9 @@ if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "2" ]; then
     "run-shell 'tmux list-sessions 2>/dev/null | grep -q . || tmux -L tmux-agent-sidebar kill-server 2>/dev/null'"
 fi
 
-# prefix + m — alterna el sidebar
-# prefix + M — recarga todos los sidebars activos (útil después de cambios en el plugin)
-tmux bind-key m run-shell "$PLUGIN_DIR/scripts/toggle.sh"
-tmux bind-key M run-shell "$PLUGIN_DIR/scripts/reload-all.sh"
+# Bind teclas solo si no están vacías (vacío = el usuario deshabilita ese atajo)
+[[ -n "$_toggle_key" ]] && tmux bind-key "$_toggle_key" run-shell "$PLUGIN_DIR/scripts/toggle.sh"
+[[ -n "$_reload_key"  ]] && tmux bind-key "$_reload_key"  run-shell "$PLUGIN_DIR/scripts/reload-all.sh"
 
 # prefix + p (configurable) — sidebar como popup flotante (opt-in, tmux 3.3+)
 _POPUP_KEY=$(tmux show-option -gqv @agent-sidebar-popup-key 2>/dev/null)
