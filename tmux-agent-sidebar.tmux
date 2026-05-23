@@ -24,6 +24,11 @@ fi
 tmux bind-key m run-shell "$PLUGIN_DIR/scripts/toggle.sh"
 tmux bind-key M run-shell "$PLUGIN_DIR/scripts/reload-all.sh"
 
+# prefix + p (configurable) — sidebar como popup flotante (opt-in, tmux 3.3+)
+_POPUP_KEY=$(tmux show-option -gqv @agent-sidebar-popup-key 2>/dev/null)
+[[ -z "$_POPUP_KEY" ]] && _POPUP_KEY="p"
+tmux bind-key "$_POPUP_KEY" run-shell "$PLUGIN_DIR/scripts/popup.sh"
+
 # Click en el sidebar → dar foco + navegar; en otros panes → comportamiento normal
 # select-pane -t= primero para que j/k funcionen si el click cae en una fila no navegable
 tmux bind-key -n MouseDown1Pane if-shell -F "#{==:#{pane_title},Sessions}" \

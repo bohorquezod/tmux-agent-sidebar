@@ -20,11 +20,17 @@ SOCKET_DIR="${TMPDIR:-/tmp}/tmux-$(id -u)"
 
 # ── Detectar contexto: sidebar server vs standalone ───────────────────────────
 if [[ -n "$OUTER_TMUX_SOCKET" ]]; then
-  # Corriendo dentro del sidebar server — OUTER_TMUX opera el servidor principal
+  # Corriendo dentro del sidebar server o en modo popup — OUTER_TMUX opera el servidor principal
   OUTER_TMUX=("$TMUXBIN" -S "$OUTER_TMUX_SOCKET")
   OUTER_SERVER="${OUTER_TMUX_SOCKET##*/}"
-  CLIENT_KEY="sidebar-server"
-  STATE_FILE="${STATE_DIR}/sidebar_server"
+  if [[ -n "$POPUP_MODE" ]]; then
+    # Proceso standalone dentro del display-popup: CLIENT_KEY único por PID
+    CLIENT_KEY="popup-$$"
+    STATE_FILE="${STATE_DIR}/popup_$$"
+  else
+    CLIENT_KEY="sidebar-server"
+    STATE_FILE="${STATE_DIR}/sidebar_server"
+  fi
 else
   # Modo standalone (retrocompatibilidad / desarrollo directo)
   OUTER_TMUX=("$TMUXBIN")
@@ -583,8 +589,13 @@ render() {
   [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
   buf+="${GR}${sep}${R}"$'\n'
   buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
-  buf+="${GR} [jk]nav [JK]mv [↵]go${R}"$'\n'
-  buf+="${GR} [hl]mode [r]↺ [q]✕${R}"$'\n'
+  if [[ -n "$POPUP_MODE" ]]; then
+    buf+="${GR} [jk]nav [↵]go·close${R}"$'\n'
+    buf+="${GR} [hl]mode [q][Esc]✕${R}"$'\n'
+  else
+    buf+="${GR} [jk]nav [JK]mv [↵]go${R}"$'\n'
+    buf+="${GR} [hl]mode [r]↺ [q]✕${R}"$'\n'
+  fi
   mapbuf+=$'\n\n\n'
 
   printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
@@ -640,8 +651,9 @@ _exec_cmd() {
     jump_to "${_wsrv}|${_wsess}|${_wid}"
     [[ "$_wsrv" == "$OUTER_SERVER" ]] && printf '%s' "$_wsess" > "${STATE_DIR}/current_session"
     printf '%s' "${_wsrv}|${_wsess}:${_wid}" > "${STATE_DIR}/just_visited"
-    _ensure_sidebar "${_wsess}:${_wid}"
+    [[ -z "$POPUP_MODE" ]] && _ensure_sidebar "${_wsess}:${_wid}"
     $TMUXBIN send-keys -t "$PANE_ID" $'\x1e' 2>/dev/null
+    [[ -n "$POPUP_MODE" ]] && exit 0
   else
     SELECTED=$_si
     jump_to "${_ssrv}|${_ssess}"
@@ -649,8 +661,9 @@ _exec_cmd() {
     # Encontrar ventana activa de la sesión destino
     local _active_win; _active_win=$("${OUTER_TMUX[@]}" list-windows -t "$_ssess" \
       -F '#{window_active}|#{window_index}' 2>/dev/null | awk -F'|' '$1=="1"{print $2; exit}')
-    [[ -n "$_active_win" ]] && _ensure_sidebar "${_ssess}:${_active_win}"
+    [[ -n "$_active_win" && -z "$POPUP_MODE" ]] && _ensure_sidebar "${_ssess}:${_active_win}"
     $TMUXBIN send-keys -t "$PANE_ID" $'\x1e' 2>/dev/null
+    [[ -n "$POPUP_MODE" ]] && exit 0
   fi
 }
 
@@ -796,6 +809,7 @@ handle_key() {
       fi ;;
 
     # ← / h / Esc — volver al header S: caminar atrás hasta el primer S
+    # En modo popup, Esc también cierra cuando el cursor ya está en una sesión
     LEFT|h|ESC)
       if [[ "$_cur_type" == "W" ]]; then
         local _si=$SELECTED
@@ -803,9 +817,12 @@ handle_key() {
           (( _si-- ))
           [[ "${ITEMS_FLAT[$_si]%%|*}" == "S" ]] && { SELECTED=$_si; break; }
         done
+      elif [[ "$key" == "ESC" && -n "$POPUP_MODE" ]]; then
+        exit 0
       fi ;;
 
     # Enter — navegar al item seleccionado y marcar como visitado (limpia unread)
+    # En modo popup, también cierra el overlay después de navegar
     $'\n'|$'\r')
       if [[ "$_cur_type" == "S" ]]; then
         local _srv="${_cur_rest%%|*}" _sess="${_cur_rest#*|}"
@@ -827,11 +844,14 @@ handle_key() {
         jump_to "${_srv}|${_sess}|${_win}"
         [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
         printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
-      fi ;;
+      fi
+      [[ -n "$POPUP_MODE" ]] && exit 0 ;;
 
 
     q|Q)
-      if [[ -n "$OUTER_TMUX_SOCKET" ]]; then
+      if [[ -n "$POPUP_MODE" ]]; then
+        exit 0
+      elif [[ -n "$OUTER_TMUX_SOCKET" ]]; then
         # Sidebar server: desconectar el cliente attach-session sin matar sidebar.sh
         $TMUXBIN detach-client 2>/dev/null
       else
