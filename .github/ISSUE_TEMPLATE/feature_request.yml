@@ -1,0 +1,57 @@
+name: Feature request
+description: Propose a new feature or improvement
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the open issues before submitting — your idea may already be tracked.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What are you trying to do that you can't do today?
+      placeholder: When I have more than 10 sessions, navigating with j/k is slow and I lose track of where I am...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should the feature look like? Describe behavior, keybindings, output.
+      placeholder: Pressing / should open a search prompt that filters sessions by name in real time...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you evaluated and why you prefer this one.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the plugin does this affect?
+      options:
+        - Sidebar UI (sidebar.sh)
+        - Daemon (daemon.sh)
+        - Server / toggle (server-start.sh, toggle.sh)
+        - Configuration / options
+        - Documentation
+        - Other / multiple
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated complexity
+      options:
+        - "S — small change, single file"
+        - "M — touches multiple scripts"
+        - "L — architectural change"
+        - "Unknown"
