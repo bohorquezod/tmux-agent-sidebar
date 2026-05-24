@@ -102,6 +102,7 @@ _SPIN_FRAME=0
 _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0
 _CMD_BUF=""
+_KILL_PENDING=""
 _SEARCH_MODE=0
 _SEARCH_QUERY=""
 _SEARCH_SEL=0
@@ -221,6 +222,65 @@ move_window_down() {
   ITEMS_FLAT[$_idx]="$_next"
   ITEMS_FLAT[$(( _idx + 1 ))]="$_item"
   SELECTED=$(( _idx + 1 ))
+  touch "$DIRTY_FILE"
+}
+
+# ── Kill sesión o ventana bajo el cursor ─────────────────────────────────────
+_kill_current() {
+  local _item="${ITEMS_FLAT[$SELECTED]:-}"
+  local _itype="${_item%%|*}"
+  local _irest="${_item#*|}"
+  local _total=${#ITEMS_FLAT[@]}
+
+  if [[ "$_itype" == "S" ]]; then
+    local _srv="${_irest%%|*}" _sess="${_irest#*|}"
+    local _tmux_cmd=("${OUTER_TMUX[@]}")
+    [[ "$_srv" != "$OUTER_SERVER" ]] && _tmux_cmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+
+    # Buscar próxima S (primero adelante, luego atrás) para reposicionar el cursor
+    local _next_si=-1 _scan
+    _scan=$(( SELECTED + 1 ))
+    while (( _scan < _total )); do
+      [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && { _next_si=$_scan; break; }
+      (( _scan++ ))
+    done
+    if [[ $_next_si -lt 0 ]]; then
+      _scan=$(( SELECTED - 1 ))
+      while (( _scan >= 0 )); do
+        [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && { _next_si=$_scan; break; }
+        (( _scan-- ))
+      done
+    fi
+
+    # Si la sesión matada es la activa en el servidor externo, cambiar clientes primero
+    local _cur_active; _cur_active=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+    if [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_cur_active" && $_next_si -ge 0 ]]; then
+      local _ns_rest="${ITEMS_FLAT[$_next_si]#*|}"
+      local _ns_sess="${_ns_rest#*|}"
+      "${OUTER_TMUX[@]}" switch-client -t "$_ns_sess" 2>/dev/null
+      printf '%s' "$_ns_sess" > "${STATE_DIR}/current_session"
+    fi
+
+    "${_tmux_cmd[@]}" kill-session -t "$_sess" 2>/dev/null
+    [[ $_next_si -ge 0 ]] && CURSOR_ITEM="${ITEMS_FLAT[$_next_si]}"
+
+  elif [[ "$_itype" == "W" ]]; then
+    local _srv="${_irest%%|*}" _wrest="${_irest#*|}"
+    local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
+    local _tmux_cmd=("${OUTER_TMUX[@]}")
+    [[ "$_srv" != "$OUTER_SERVER" ]] && _tmux_cmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+
+    # Encontrar la S padre para devolver el cursor
+    local _parent_si=-1 _scan=$SELECTED
+    while (( _scan >= 0 )); do
+      [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && { _parent_si=$_scan; break; }
+      (( _scan-- ))
+    done
+
+    "${_tmux_cmd[@]}" kill-window -t "${_sess}:${_widx}" 2>/dev/null
+    [[ $_parent_si -ge 0 ]] && CURSOR_ITEM="${ITEMS_FLAT[$_parent_si]}"
+  fi
+
   touch "$DIRTY_FILE"
 }
 
@@ -593,6 +653,7 @@ render() {
       fi
       # Sesión padre del cursor en modo ventana → nombre en blanco brillante
       [[ -n "$_cursor_parent_item" && "$_item" == "$_cursor_parent_item" ]] && _nc="$WH"
+      [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]] && { _ic="$RD"; _nc="$RD"; _cursor="✕"; }
       local _sessd="${_sess:0:$max}"; [[ ${#_sess} -gt $max ]] && _sessd="${_sess:0:$(( max-1 ))}…"
       if [[ "$_drill_mode" == "1" ]]; then
         # Drill-down: solo nombre, sin número ordinal
@@ -676,7 +737,9 @@ render() {
         _wdisp="${_wname:0:$_maxn}"
       fi
 
-      if [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
+      if [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]]; then
+        buf+="${_wpfx}${RD}${_br}${R} ${RD}✕${R} ${RD}${_wdisp}${R}"$'\n'
+      elif [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
         # Ventana activa: nombre siempre verde (foco), icono usa su color de estado
         # working=cyan spinner, idle=verde, para distinguir "aquí+working" de "aquí+idle"
         local _active_icon_col="$G"
@@ -721,9 +784,12 @@ render() {
   if [[ -n "$POPUP_MODE" ]]; then
     buf+="${GR} [jk]nav [↵]go·close${R}"$'\n'
     buf+="${GR} [hl]mode [q][Esc]✕${R}"$'\n'
+  elif [[ -n "$_KILL_PENDING" ]]; then
+    buf+="${RD} [x]confirm kill · [ESC]cancel${R}"$'\n'
+    buf+="${GR} [jk]nav [hl]mode [r]↺ [q]✕${R}"$'\n'
   else
     buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
-    buf+="${GR} [hl]mode [p]👁 [r]↺ [q]✕${R}"$'\n'
+    buf+="${GR} [hl]mode [p]👁 [x]kill [r]↺ [q]✕${R}"$'\n'
   fi
   mapbuf+=$'\n\n\n'
 
@@ -979,6 +1045,9 @@ handle_key() {
   local _cur_type="${_cur_item%%|*}"
   local _cur_rest="${_cur_item#*|}"
 
+  # Cancelar kill pendiente con cualquier tecla excepto x y wake-up
+  [[ -n "$_KILL_PENDING" && "$key" != "x" && "$key" != $'\x1e' ]] && _KILL_PENDING=""
+
   case "$key" in
     $'\x1e') ;; # wake-up
 
@@ -1094,6 +1163,13 @@ handle_key() {
       fi
       [[ -n "$POPUP_MODE" ]] && exit 0 ;;
 
+
+    x)
+      if [[ -n "$_KILL_PENDING" && "$_KILL_PENDING" == "$_cur_item" ]]; then
+        _kill_current; _KILL_PENDING=""
+      else
+        _KILL_PENDING="$_cur_item"
+      fi ;;
 
     p)
       if [[ "$PREVIEW_MODE" == "0" ]]; then PREVIEW_MODE=1; else PREVIEW_MODE=0; fi ;;
