@@ -107,6 +107,9 @@ _SEARCH_MODE=0
 _SEARCH_QUERY=""
 _SEARCH_SEL=0
 _SEARCH_ITEMS=()
+_RENAME_ITEM=""   # ITEMS_FLAT entry under rename
+_RENAME_BUF=""    # rename edit buffer (initialized with current name)
+_RENAME_TYPE=""   # "S" or "W"
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
@@ -581,6 +584,9 @@ render() {
   if [[ -n "$_CMD_BUF" ]]; then
     _mode_label="[CMD]"
     _hdr_text="${_CMD_BUF}▌"
+  elif [[ -n "$_RENAME_ITEM" ]]; then
+    _mode_label="[REN]"
+    _hdr_text="Rename: ${_RENAME_BUF}▌"
   else
     _mode_label="[NAV]"
     _hdr_text="Claude"
@@ -593,6 +599,8 @@ render() {
 
   if [[ -n "$_CMD_BUF" ]]; then
     buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
+  elif [[ -n "$_RENAME_ITEM" ]]; then
+    buf+="${PU} ◈${R}  ${CY}Rename:${R} ${YL}${_RENAME_BUF}${GR}▌${R}${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
   else
     buf+="${PU} ◈${R}  Claude${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
   fi
@@ -786,10 +794,10 @@ render() {
     buf+="${GR} [hl]mode [q][Esc]✕${R}"$'\n'
   elif [[ -n "$_KILL_PENDING" ]]; then
     buf+="${RD} [x]confirm kill · [ESC]cancel${R}"$'\n'
-    buf+="${GR} [jk]nav [hl]mode [r]↺ [q]✕${R}"$'\n'
+    buf+="${GR} [jk]nav [hl]mode [R]↺ [q]✕${R}"$'\n'
   else
     buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
-    buf+="${GR} [hl]mode [p]👁 [x]kill [r]↺ [q]✕${R}"$'\n'
+    buf+="${GR} [hl]mode [p]👁 [x]kill [r]ren [R]↺ [q]✕${R}"$'\n'
   fi
   mapbuf+=$'\n\n\n'
 
@@ -972,6 +980,34 @@ _ensure_sidebar() {
   fi
 }
 
+# ── Aplicar rename inline ─────────────────────────────────────────────────────
+_apply_rename() {
+  [[ -z "$_RENAME_BUF" ]] && return
+  local _rest="${_RENAME_ITEM#*|}"
+  local _srv="${_rest%%|*}"
+  local _tmux_cmd=("${OUTER_TMUX[@]}")
+  [[ "$_srv" != "$OUTER_SERVER" ]] && _tmux_cmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+
+  if [[ "$_RENAME_TYPE" == "S" ]]; then
+    local _old_sess="${_rest#*|}"
+    "${_tmux_cmd[@]}" rename-session -t "$_old_sess" "$_RENAME_BUF" 2>/dev/null
+    # Actualizar SESSIONS_FLAT en-place para preservar el orden del usuario
+    local _si2=0
+    for _sf in "${SESSIONS_FLAT[@]}"; do
+      [[ "$_sf" == "${_srv}|${_old_sess}" ]] && { SESSIONS_FLAT[$_si2]="${_srv}|${_RENAME_BUF}"; break; }
+      (( _si2++ ))
+    done
+    # Propagar a current_session si era la sesión activa
+    local _cs; _cs=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+    [[ "$_cs" == "$_old_sess" ]] && printf '%s' "$_RENAME_BUF" > "${STATE_DIR}/current_session"
+  elif [[ "$_RENAME_TYPE" == "W" ]]; then
+    local _wr="${_rest#*|}"
+    local _sess="${_wr%%|*}" _wid="${_wr#*|}"
+    "${_tmux_cmd[@]}" rename-window -t "${_sess}:${_wid}" "$_RENAME_BUF" 2>/dev/null
+  fi
+  touch "$DIRTY_FILE"
+}
+
 # ── Manejo de teclas ──────────────────────────────────────────────────────────
 handle_key() {
   local key="$1"
@@ -986,6 +1022,19 @@ handle_key() {
       "[C") key="RIGHT" ;; "[D") key="LEFT" ;;
       *)    key="ESC" ;;
     esac
+  fi
+
+  # ── Modo rename inline ────────────────────────────────────────────────────
+  if [[ -n "$_RENAME_ITEM" ]]; then
+    case "$key" in
+      $'\x1e') ;;
+      ""|$'\n'|$'\r')  _apply_rename; _RENAME_ITEM=""; _RENAME_BUF=""; _RENAME_TYPE="" ;;
+      ESC)             _RENAME_ITEM=""; _RENAME_BUF=""; _RENAME_TYPE="" ;;
+      UP|DOWN|LEFT|RIGHT) ;;
+      $'\x7f'|$'\x08') _RENAME_BUF="${_RENAME_BUF%?}" ;;
+      *) _RENAME_BUF+="$key" ;;
+    esac
+    return
   fi
 
   # ── Modo comando: buffer activo — todo va al buffer ───────────────────────
@@ -1059,13 +1108,29 @@ handle_key() {
     # `/` activa el modo búsqueda inline
     "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
 
-    r|R)
+    R)
       kill "$_ANIMATOR_PID" 2>/dev/null
       rm -f "${STATE_DIR}/animator_active"
       ps aux 2>/dev/null | grep "[d]aemon.sh" | grep -v grep | awk '{print $2}' \
         | xargs kill -9 2>/dev/null
       rm -f "${STATE_DIR}/daemon.pid"; rm -rf "${STATE_DIR}/daemon.lock"
       _RELOADING=1; exec "$0" ;;
+
+    r)
+      local _ri="${ITEMS_FLAT[$SELECTED]:-}"
+      local _rtype="${_ri%%|*}" _rrest="${_ri#*|}"
+      if [[ "$_rtype" == "S" ]]; then
+        local _rsess="${_rrest#*|}"
+        _RENAME_ITEM="$_ri"; _RENAME_TYPE="S"; _RENAME_BUF="$_rsess"
+      elif [[ "$_rtype" == "W" ]]; then
+        local _rsrv="${_rrest%%|*}" _rwr="${_rrest#*|}"
+        local _rwsess="${_rwr%%|*}" _rwid="${_rwr#*|}"
+        local _rtmux=("${OUTER_TMUX[@]}")
+        [[ "$_rsrv" != "$OUTER_SERVER" ]] && _rtmux=("$TMUXBIN" -S "$SOCKET_DIR/$_rsrv")
+        local _rname; _rname=$("${_rtmux[@]}" display-message -t "${_rwsess}:${_rwid}" \
+          -p '#{window_name}' 2>/dev/null)
+        _RENAME_ITEM="$_ri"; _RENAME_TYPE="W"; _RENAME_BUF="${_rname:-}"
+      fi ;;
 
     j|DOWN)
       if [[ "$_cur_type" == "S" ]]; then
