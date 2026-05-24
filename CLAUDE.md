@@ -38,7 +38,7 @@ All runtime state lives in `${TMPDIR:-/tmp}/agent-sidebar/`. Key files:
 | `clients/<key>`            | PID of each running `sidebar.sh` instance                  |
 | `current_session`          | Active session name (written by hook and `sidebar.sh`)     |
 | `rowmap`                   | Maps display row → `server\|session[\|winidx]` for clicks  |
-| `sidebar_width`            | Persisted pane width (used when creating new sidebar panes)|
+| `sidebar_width_<server>`   | Persisted pane width per tmux server socket name           |
 | `<key>.unread`             | Touch-file: unread notification for a window               |
 | `<key>.prev_icon`          | Last icon seen for a window (used to detect transitions)   |
 
