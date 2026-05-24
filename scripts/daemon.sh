@@ -172,8 +172,20 @@ build_data() {
       [[ "$_sfound" == false ]] && _sess_sorted+=("$_se")
     done
 
+    local _hidden_raw; _hidden_raw=$(cat "${STATE_DIR}/hidden_sessions" 2>/dev/null)
+
     for _sess_entry in "${_sess_sorted[@]}"; do
       local _sess="${_sess_entry%%|*}" _attached="${_sess_entry#*|}"
+
+      # Saltar sesiones en la lista de hidden_sessions (separadas por espacios)
+      if [[ -n "$_hidden_raw" ]]; then
+        local _skip=false _hs
+        for _hs in $_hidden_raw; do
+          [[ "$_sess" == "$_hs" ]] && { _skip=true; break; }
+        done
+        [[ "$_skip" == true ]] && continue
+      fi
+
       local _is_active=0; [[ "${_attached:-0}" -gt 0 ]] && _is_active=1
 
       # Recopilar ventanas del session para saber cuál es la última
@@ -263,17 +275,18 @@ LAST_BUILD=-999  # fuerza el primer build inmediatamente
 HAS_WORKING=false
 
 while true; do
+  _interval=$(cat "${STATE_DIR}/refresh_interval" 2>/dev/null)
+  [[ "$_interval" =~ ^[0-9]+$ ]] || _interval=2
+
   _SB=false
   [[ -f "$DIRTY_FILE" ]] && { rm -f "$DIRTY_FILE"; _SB=true; }
 
   if [[ "$HAS_WORKING" == true ]]; then
-    # Ventanas activas: rebuild para animar el spinner (~5 FPS)
     _SB=true
     _SLEEP=0.2
   else
-    # Sin ventanas activas: fallback poll cada 3s (los hooks cubren los eventos)
-    (( SECONDS - LAST_BUILD >= 3 )) && _SB=true
-    _SLEEP=3
+    (( SECONDS - LAST_BUILD >= _interval )) && _SB=true
+    _SLEEP=$_interval
   fi
 
   if [[ "$_SB" == true ]]; then
