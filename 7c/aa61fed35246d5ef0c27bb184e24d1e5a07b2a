@@ -1,0 +1,9 @@
+scripts/sidebar.sh
+  ai_agent 100-103,456,467-545,736,873-912,927-928
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "7caa61fed35246d5ef0c27bb184e24d1e5a07b2a",
+  "prompts": {}
+}
