@@ -23,9 +23,16 @@ fi
 # 2. Si el sidebar server ya tiene la sesión activa: nada que hacer
 $TMUXBIN -L "$SERVER" has-session -t "$SESSION" 2>/dev/null && exit 0
 
-# 3. Determinar ancho inicial
-WIDTH=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-[[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]] && WIDTH=28
+# 3. Determinar ancho inicial por servidor
+OUTER_SERVER="${OUTER_SOCKET##*/}"
+_srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
+_width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+[[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+WIDTH=$(cat "$_width_f" 2>/dev/null)
+if [[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]]; then
+  WIDTH=$($TMUXBIN show-option -gqv @agent-sidebar-width 2>/dev/null)
+  [[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]] && WIDTH=28
+fi
 
 # 4. Crear sesión en sidebar server con config vacía (sin ~/.tmux.conf, sin plugins)
 $TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y 50 \

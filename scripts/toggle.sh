@@ -7,6 +7,8 @@ STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 SERVER="tmux-agent-sidebar"
 SESSION="sidebar"
 
+OUTER_SERVER="${TMUX%%,*}"; OUTER_SERVER="${OUTER_SERVER##*/}"
+
 SESS=$($TMUXBIN display-message -p '#S')
 WIN_IDX=$($TMUXBIN display-message -p '#I')
 ACTIVE_PANE=$($TMUXBIN display-message -p '#{pane_id}')
@@ -34,8 +36,14 @@ fi
 # Asegurar que el sidebar server está corriendo
 bash "$PLUGIN_DIR/scripts/server-start.sh"
 
-SIDEBAR_W=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-[[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]] && SIDEBAR_W=28
+_srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
+_width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+[[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+SIDEBAR_W=$(cat "$_width_f" 2>/dev/null)
+if [[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]]; then
+  SIDEBAR_W=$($TMUXBIN show-option -gqv @agent-sidebar-width 2>/dev/null)
+  [[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]] && SIDEBAR_W=28
+fi
 
 if [[ -n "$DEAD_PANE" ]]; then
   # Pane muerto: reutilizar reconectando al sidebar server y darle foco

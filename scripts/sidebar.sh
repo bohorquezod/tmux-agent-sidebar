@@ -96,6 +96,10 @@ _SPIN_FRAME=0
 _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0
 _CMD_BUF=""
+_SEARCH_MODE=0
+_SEARCH_QUERY=""
+_SEARCH_SEL=0
+_SEARCH_ITEMS=()
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
@@ -107,6 +111,7 @@ ITEMS_FLAT=()
 SELECTED=0
 CURSOR_ITEM=""
 _INITIAL_SELECT=1   # posicionar cursor en sesión actual al primer render
+PREVIEW_MODE=0      # p: toggle preview del pane bajo el cursor (off por defecto)
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
@@ -241,9 +246,12 @@ render() {
 
   local W; W=$($TMUXBIN display-message -t "$PANE_ID" -p '#{pane_width}' 2>/dev/null)
   [[ -z "$W" ]] && W=28
-  # Persiste el ancho actual para que nuevas ventanas abran el sidebar al mismo ancho
-  local _sw; _sw=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-  [[ "$W" != "$_sw" ]] && printf '%s' "$W" > "${STATE_DIR}/sidebar_width"
+  # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho
+  local _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
+  local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+  [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+  local _sw; _sw=$(cat "$_width_f" 2>/dev/null)
+  [[ "$W" != "$_sw" ]] && printf '%s' "$W" > "$_width_f"
   local max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
 
@@ -389,7 +397,7 @@ render() {
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _k2=0
   for _wi2 in "${_W_icon[@]}"; do
     case "$_wi2" in
-      "⚡") (( _wc++ )) ;;
+      "⚡") (( _wc++ )); _HAS_WORKING=1 ;;
       "⏸") (( _ic_raw++ )) ;;
       "·")  (( _ec++ )) ;;
     esac
@@ -399,6 +407,85 @@ render() {
     fi
     (( _k2++ ))
   done
+
+  # ── Modo búsqueda inline ─────────────────────────────────────────────────────
+  if [[ "$_SEARCH_MODE" == "1" ]]; then
+    local _ql _fit _ftype _frest _fname _fl _si2 _stotal
+    _ql=$(printf '%s' "$_SEARCH_QUERY" | tr '[:upper:]' '[:lower:]')
+    _SEARCH_ITEMS=()
+    for _fit in "${ITEMS_FLAT[@]}"; do
+      _ftype="${_fit%%|*}"; _frest="${_fit#*|}"
+      _fname=""
+      if [[ "$_ftype" == "S" ]]; then
+        _fname="${_frest#*|}"
+      elif [[ "$_ftype" == "W" ]]; then
+        local _fsrv="${_frest%%|*}" _fwr="${_frest#*|}"
+        local _fss="${_fwr%%|*}" _fwid="${_fwr#*|}" _kk=0
+        for _ws3 in "${_W_srv[@]}"; do
+          if [[ "$_ws3" == "$_fsrv" && "${_W_sess[$_kk]}" == "$_fss" && "${_W_widx[$_kk]}" == "$_fwid" ]]; then
+            _fname="${_W_name[$_kk]}"; break
+          fi
+          (( _kk++ ))
+        done
+      fi
+      _fl=$(printf '%s' "$_fname" | tr '[:upper:]' '[:lower:]')
+      if [[ -z "$_ql" || "$_fl" == *"$_ql"* ]]; then
+        _SEARCH_ITEMS+=("$_fit")
+      fi
+    done
+
+    _stotal=${#_SEARCH_ITEMS[@]}
+    [[ $_SEARCH_SEL -ge $_stotal && $_stotal -gt 0 ]] && _SEARCH_SEL=$(( _stotal - 1 ))
+    [[ $_SEARCH_SEL -lt 0 ]] && _SEARCH_SEL=0
+
+    local buf="" mapbuf=""
+    buf="${PU} ◈${R}  /${YL}${_SEARCH_QUERY}${GR}▌${R}"$'\n'
+    mapbuf=$'\n'
+    buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+
+    if [[ $_stotal -eq 0 ]]; then
+      buf+="${GR} (sin resultados)${R}"$'\n'; mapbuf+=$'\n'
+    else
+      _si2=0
+      for _fit in "${_SEARCH_ITEMS[@]}"; do
+        _ftype="${_fit%%|*}"; _frest="${_fit#*|}"
+        local _fc="$GR" _fcur=" "
+        [[ $_si2 -eq $_SEARCH_SEL ]] && { _fc="$YL"; _fcur="›"; }
+        if [[ "$_ftype" == "S" ]]; then
+          local _fsess="${_frest#*|}"
+          local _sessd="${_fsess:0:$max}"
+          [[ ${#_fsess} -gt $max ]] && _sessd="${_fsess:0:$(( max - 1 ))}…"
+          buf+="${_fc}${_fcur}   ${_sessd}${R}"$'\n'
+          mapbuf+="${_frest%%|*}|${_fsess}"$'\n'
+        elif [[ "$_ftype" == "W" ]]; then
+          local _fsrv2="${_frest%%|*}" _fwr2="${_frest#*|}"
+          local _fss2="${_fwr2%%|*}" _fwid2="${_fwr2#*|}" _wn2="" _kk2=0
+          for _ws4 in "${_W_srv[@]}"; do
+            if [[ "$_ws4" == "$_fsrv2" && "${_W_sess[$_kk2]}" == "$_fss2" && "${_W_widx[$_kk2]}" == "$_fwid2" ]]; then
+              _wn2="${_W_name[$_kk2]}"; break
+            fi
+            (( _kk2++ ))
+          done
+          local _maxn2=$(( max - 3 )) _wdisp2
+          [[ ${#_wn2} -gt $_maxn2 ]] && _wdisp2="${_wn2:0:$(( _maxn2 - 1 ))}…" || _wdisp2="${_wn2:0:$_maxn2}"
+          buf+="${_fc}${_fcur}   ${_wdisp2}${R}"$'\n'
+          mapbuf+="${_fsrv2}|${_fss2}|${_fwid2}"$'\n'
+        fi
+        (( _si2++ ))
+      done
+    fi
+
+    buf+=$'\n'; mapbuf+=$'\n'
+    buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+    buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
+    buf+="${GR} [jk]nav [↵]go [Esc]cancel${R}"$'\n'
+    mapbuf+=$'\n\n'
+
+    printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
+    mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
+    printf '\033[H\033[J%s' "$buf"
+    return
+  fi
 
   # Detectar sesión padre del cursor (para resaltado blanco en modo ventana)
   local _cursor_parent_item=""
@@ -423,10 +510,25 @@ render() {
   # ── Construir buffer de display ───────────────────────────────────────────
   local buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
 
+  # Mode indicator: [NAV] | [CMD] <buffer> | [SRCH] <query> (search: future)
+  local _mode_label _hdr_text _hdr_len _pad_len _hdr_spaces
   if [[ -n "$_CMD_BUF" ]]; then
-    buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}"$'\n'
+    _mode_label="[CMD]"
+    _hdr_text="${_CMD_BUF}▌"
   else
-    buf+="${PU} ◈${R}  Claude"$'\n'
+    _mode_label="[NAV]"
+    _hdr_text="Claude"
+  fi
+  # " ◈  " = 4 visible chars; 1 space before mode label
+  _hdr_len=$(( 4 + ${#_hdr_text} ))
+  _pad_len=$(( W - _hdr_len - 1 - ${#_mode_label} ))
+  [[ $_pad_len -lt 0 ]] && _pad_len=0
+  _hdr_spaces=$(printf '%*s' "$_pad_len" "")
+
+  if [[ -n "$_CMD_BUF" ]]; then
+    buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
+  else
+    buf+="${PU} ◈${R}  Claude${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
   fi
   mapbuf+=$'\n'
   buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
@@ -475,7 +577,7 @@ render() {
       fi
 
       local _cursor=" " _ic="$GR" _nc=""
-      [[ $_ii -eq $SELECTED ]] && { _cursor="›"; _ic="$YL"; }
+      [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && { _cursor="›"; _ic="$YL"; }
       if [[ "$_is_act" == "1" ]]; then
         _cursor="▶"; _nc="$BG"
         [[ $_ii -eq $SELECTED ]] && _ic="$YL" || _ic="$BG"
@@ -582,9 +684,33 @@ render() {
 
   [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
   buf+="${GR}${sep}${R}"$'\n'
+
+  # ── Área de preview ────────────────────────────────────────────────────────
+  if [[ "$PREVIEW_MODE" == "1" ]]; then
+    local _pitem="${ITEMS_FLAT[$SELECTED]:-}"
+    if [[ "${_pitem%%|*}" == "W" ]]; then
+      local _pr="${_pitem#*|}"
+      local _psrv="${_pr%%|*}"
+      local _pr2="${_pr#*|}"
+      local _psess="${_pr2%%|*}"
+      local _pwidx="${_pr2#*|}"
+      local _pkey="${_psrv//[^a-zA-Z0-9_-]/_}_${_psess//[^a-zA-Z0-9_-]/_}_${_pwidx}"
+      local _cap_file="${STATE_DIR}/captures/${_pkey}"
+      local _preview_lines _pl
+      _preview_lines=$(tail -n 10 "$_cap_file" 2>/dev/null)
+      if [[ -n "$_preview_lines" ]]; then
+        while IFS= read -r _pl || [[ -n "$_pl" ]]; do
+          if [[ ${#_pl} -gt $W ]]; then _pl="${_pl:0:$(( W - 1 ))}…"; fi
+          buf+="${GR}${_pl}${R}"$'\n'
+          mapbuf+=$'\n'
+        done <<< "$_preview_lines"
+      fi
+    fi
+  fi
+
   buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
-  buf+="${GR} [jk]nav [JK]mv [↵]go${R}"$'\n'
-  buf+="${GR} [hl]mode [r]↺ [q]✕${R}"$'\n'
+  buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
+  buf+="${GR} [hl]mode [p]👁 [r]↺ [q]✕${R}"$'\n'
   mapbuf+=$'\n\n\n'
 
   printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
@@ -592,19 +718,86 @@ render() {
   printf '\033[H\033[J%s' "$buf"
 }
 
-# ── Ejecutar comando del buffer (N, N.M, etc.) ───────────────────────────────
+# ── Catálogo de comandos del command buffer ───────────────────────────────────
+#
+# DISEÑO:
+#   1. `:` y dígitos activan el command buffer (estilo vim/tmux).
+#      Los dígitos son el flujo más frecuente (N y N.M); no requieren prefijo.
+#      ESC cancela el buffer y vuelve al modo normal.
+#   2. `/` activa el modo búsqueda inline (_SEARCH_MODE) con navegación j/k
+#      y Enter para navegar al resultado — no usa _CMD_BUF.
+#   3. Shortcuts de una letra (r, q, j, k, J, K, h, l) viven FUERA del buffer
+#      (modo navegación). Dentro del buffer son texto literal. Sin colisiones.
+#
+# CATÁLOGO — prefijos disjuntos: dígito, /, :
+#   N          navegar a la sesión N (ordinal en la lista)
+#   N.M        navegar a la sesión N, ventana M
+#   /          búsqueda inline por nombre (modo _SEARCH_MODE, ver handle_key)
+#   :kill      matar el item bajo el cursor (sesión o ventana)
+#   :new       crear nueva sesión en el servidor activo
+#   :rename X  renombrar el item bajo el cursor a X
 _exec_cmd() {
-  local _c="$1" _snum="" _wnum=""
-  [[ "$_c" == :* ]] && _c="${_c#:}"
-  if [[ "$_c" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+  local _c="$1"
+
+  case "$_c" in
+    # ── :kill — matar sesión o ventana bajo el cursor ─────────────────────
+    :kill|:k)
+      local _ci="${ITEMS_FLAT[$SELECTED]:-}"
+      local _ct="${_ci%%|*}" _cr="${_ci#*|}"
+      if [[ "$_ct" == "S" ]]; then
+        local _srv="${_cr%%|*}" _sess="${_cr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" kill-session -t "$_sess" 2>/dev/null
+      elif [[ "$_ct" == "W" ]]; then
+        local _srv="${_cr%%|*}" _wr="${_cr#*|}"
+        local _sess="${_wr%%|*}" _wid="${_wr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" kill-window -t "${_sess}:${_wid}" 2>/dev/null
+      fi
+      touch "$DIRTY_FILE"
+      return ;;
+
+    # ── :new — crear nueva sesión en el servidor activo ───────────────────
+    :new)
+      "${OUTER_TMUX[@]}" new-session -d 2>/dev/null
+      touch "$DIRTY_FILE"
+      return ;;
+
+    # ── :rename X — renombrar sesión o ventana bajo el cursor ─────────────
+    :rename\ *)
+      local _newname="${_c#:rename }"
+      [[ -z "$_newname" ]] && return
+      local _ci="${ITEMS_FLAT[$SELECTED]:-}"
+      local _ct="${_ci%%|*}" _cr="${_ci#*|}"
+      if [[ "$_ct" == "S" ]]; then
+        local _srv="${_cr%%|*}" _sess="${_cr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" rename-session -t "$_sess" "$_newname" 2>/dev/null
+      elif [[ "$_ct" == "W" ]]; then
+        local _srv="${_cr%%|*}" _wr="${_cr#*|}"
+        local _sess="${_wr%%|*}" _wid="${_wr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" rename-window -t "${_sess}:${_wid}" "$_newname" 2>/dev/null
+      fi
+      touch "$DIRTY_FILE"
+      return ;;
+
+  esac
+
+  # ── Navegación numérica: N o N.M ─────────────────────────────────────────
+  local _snum="" _wnum="" _cn="$_c"
+  [[ "$_cn" == :* ]] && _cn="${_cn#:}"
+  if [[ "$_cn" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
     _snum="${BASH_REMATCH[1]}"; _wnum="${BASH_REMATCH[2]}"
-  elif [[ "$_c" =~ ^[0-9]+$ ]]; then
-    _snum="$_c"
+  elif [[ "$_cn" =~ ^[0-9]+$ ]]; then
+    _snum="$_cn"
   else
     return
   fi
-  printf 'exec_cmd: c=%s snum=%s wnum=%s items=%d\n' "$_c" "$_snum" "$_wnum" "${#ITEMS_FLAT[@]}" >> /tmp/sidebar_debug.log
-  local _di=0; for _dit in "${ITEMS_FLAT[@]}"; do printf '  [%d] %s\n' "$_di" "$_dit" >> /tmp/sidebar_debug.log; ((_di++)); done
 
   # Encontrar la sesión en posición ordinal _snum
   local _n=0 _ii=0 _si=-1
@@ -619,7 +812,6 @@ _exec_cmd() {
   local _ssess="${_sr#*|}"
 
   if [[ -n "$_wnum" ]]; then
-    # Encontrar ventana en posición ordinal _wnum dentro de la sesión
     local _wn=0 _wi=$(( _si + 1 )) _wfound=-1
     while [[ $_wi -lt ${#ITEMS_FLAT[@]} ]]; do
       local _wit="${ITEMS_FLAT[$_wi]}"
@@ -646,7 +838,6 @@ _exec_cmd() {
     SELECTED=$_si
     jump_to "${_ssrv}|${_ssess}"
     [[ "$_ssrv" == "$OUTER_SERVER" ]] && printf '%s' "$_ssess" > "${STATE_DIR}/current_session"
-    # Encontrar ventana activa de la sesión destino
     local _active_win; _active_win=$("${OUTER_TMUX[@]}" list-windows -t "$_ssess" \
       -F '#{window_active}|#{window_index}' 2>/dev/null | awk -F'|' '$1=="1"{print $2; exit}')
     [[ -n "$_active_win" ]] && _ensure_sidebar "${_ssess}:${_active_win}"
@@ -658,8 +849,14 @@ _exec_cmd() {
 _ensure_sidebar() {
   local _dest="$1"
   local _server="tmux-agent-sidebar" _session="sidebar"
-  local _sw; _sw=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-  [[ -z "$_sw" || ! "$_sw" =~ ^[0-9]+$ ]] && _sw=28
+  local _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
+  local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+  [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+  local _sw; _sw=$(cat "$_width_f" 2>/dev/null)
+  if [[ -z "$_sw" || ! "$_sw" =~ ^[0-9]+$ ]]; then
+    _sw=$("${OUTER_TMUX[@]}" show-option -gqv @agent-sidebar-width 2>/dev/null)
+    [[ -z "$_sw" || ! "$_sw" =~ ^[0-9]+$ ]] && _sw=28
+  fi
 
   local _live; _live=$("${OUTER_TMUX[@]}" list-panes -t "$_dest" \
     -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
@@ -719,6 +916,46 @@ handle_key() {
     return
   fi
 
+  # ── Modo búsqueda inline ─────────────────────────────────────────────────────
+  if [[ "$_SEARCH_MODE" == "1" ]]; then
+    case "$key" in
+      $'\x1e') ;;
+      $'\x7f'|$'\x08')
+        _SEARCH_QUERY="${_SEARCH_QUERY%?}"; _SEARCH_SEL=0 ;;
+      $'\n'|$'\r')
+        local _stotal=${#_SEARCH_ITEMS[@]}
+        if [[ $_stotal -gt 0 && $_SEARCH_SEL -lt $_stotal ]]; then
+          local _sit="${_SEARCH_ITEMS[$_SEARCH_SEL]}"
+          local _stype="${_sit%%|*}" _srest="${_sit#*|}"
+          if [[ "$_stype" == "S" ]]; then
+            local _srv="${_srest%%|*}" _sess="${_srest#*|}"
+            jump_to "${_srv}|${_sess}"
+            [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+          elif [[ "$_stype" == "W" ]]; then
+            local _srv="${_srest%%|*}" _wr="${_srest#*|}"
+            local _sess="${_wr%%|*}" _win="${_wr#*|}"
+            jump_to "${_srv}|${_sess}|${_win}"
+            [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+            printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
+          fi
+          local _sfi=0
+          for _sfit in "${ITEMS_FLAT[@]}"; do
+            [[ "$_sfit" == "$_sit" ]] && { SELECTED=$_sfi; break; }; (( _sfi++ ))
+          done
+        fi
+        _SEARCH_MODE=0; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+      ESC)
+        _SEARCH_MODE=0; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+      j|DOWN)
+        [[ $(( _SEARCH_SEL + 1 )) -lt ${#_SEARCH_ITEMS[@]} ]] && (( _SEARCH_SEL++ )) ;;
+      k|UP)
+        [[ $_SEARCH_SEL -gt 0 ]] && (( _SEARCH_SEL-- )) ;;
+      *)
+        if [[ ${#key} -eq 1 ]]; then _SEARCH_QUERY+="$key"; _SEARCH_SEL=0; fi ;;
+    esac
+    return
+  fi
+
   # ── Modo navegación normal ────────────────────────────────────────────────
   local _cur_item="${ITEMS_FLAT[$SELECTED]:-}"
   local _cur_type="${_cur_item%%|*}"
@@ -727,8 +964,13 @@ handle_key() {
   case "$key" in
     $'\x1e') ;; # wake-up
 
-    # `:` activa el modo comando explícito (estilo vim/tmux)
+    # `:`, `/` y dígitos activan el buffer directamente (ver catálogo de comandos)
     ":") _CMD_BUF=":" ;;
+    "/") _CMD_BUF="/" ;;
+    [0-9]) _CMD_BUF="$key" ;;
+
+    # `/` activa el modo búsqueda inline
+    "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
 
     r|R)
       kill "$_ANIMATOR_PID" 2>/dev/null
@@ -829,6 +1071,9 @@ handle_key() {
         printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
       fi ;;
 
+
+    p)
+      if [[ "$PREVIEW_MODE" == "0" ]]; then PREVIEW_MODE=1; else PREVIEW_MODE=0; fi ;;
 
     q|Q)
       if [[ -n "$OUTER_TMUX_SOCKET" ]]; then
