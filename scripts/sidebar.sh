@@ -507,10 +507,25 @@ render() {
   # ── Construir buffer de display ───────────────────────────────────────────
   local buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
 
+  # Mode indicator: [NAV] | [CMD] <buffer> | [SRCH] <query> (search: future)
+  local _mode_label _hdr_text _hdr_len _pad_len _hdr_spaces
   if [[ -n "$_CMD_BUF" ]]; then
-    buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}"$'\n'
+    _mode_label="[CMD]"
+    _hdr_text="${_CMD_BUF}▌"
   else
-    buf+="${PU} ◈${R}  Claude"$'\n'
+    _mode_label="[NAV]"
+    _hdr_text="Claude"
+  fi
+  # " ◈  " = 4 visible chars; 1 space before mode label
+  _hdr_len=$(( 4 + ${#_hdr_text} ))
+  _pad_len=$(( W - _hdr_len - 1 - ${#_mode_label} ))
+  [[ $_pad_len -lt 0 ]] && _pad_len=0
+  _hdr_spaces=$(printf '%*s' "$_pad_len" "")
+
+  if [[ -n "$_CMD_BUF" ]]; then
+    buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
+  else
+    buf+="${PU} ◈${R}  Claude${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
   fi
   mapbuf+=$'\n'
   buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
