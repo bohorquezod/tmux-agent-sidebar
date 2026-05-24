@@ -1,0 +1,27 @@
+CLAUDE.md
+  ai_agent 41
+README.md
+  ai_agent 46-92
+scripts/daemon.sh
+  ai_agent 11,15,18,139,141-147,201-203,217-249,262-264,268-286,288
+scripts/server-start.sh
+  ai_agent 26-35
+scripts/summary.sh
+  ai_agent 1-34
+scripts/toggle.sh
+  ai_agent 10-11,39-46
+scripts/popup.sh
+  ai_agent 1-27
+scripts/click.sh
+  ai_agent 35-38,97-104
+scripts/sidebar.sh
+  ai_agent 23,26-33,121,315-320,579-593,595,597,628-631,649,759-782,784-787,792,801-818,820-874,876-877,912,916,918,921,926,928,936-943,1054,1056-1057,1128,1136-1137,1141,1163-1164,1174-1176,1178-1180
+tmux-agent-sidebar.tmux
+  ai_agent 10-12,27-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "0ef86a747bd9dc4c1a649163e7c10d005280e803",
+  "prompts": {}
+}
