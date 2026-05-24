@@ -718,19 +718,86 @@ render() {
   printf '\033[H\033[J%s' "$buf"
 }
 
-# ── Ejecutar comando del buffer (N, N.M, etc.) ───────────────────────────────
+# ── Catálogo de comandos del command buffer ───────────────────────────────────
+#
+# DISEÑO:
+#   1. `:` y dígitos activan el command buffer (estilo vim/tmux).
+#      Los dígitos son el flujo más frecuente (N y N.M); no requieren prefijo.
+#      ESC cancela el buffer y vuelve al modo normal.
+#   2. `/` activa el modo búsqueda inline (_SEARCH_MODE) con navegación j/k
+#      y Enter para navegar al resultado — no usa _CMD_BUF.
+#   3. Shortcuts de una letra (r, q, j, k, J, K, h, l) viven FUERA del buffer
+#      (modo navegación). Dentro del buffer son texto literal. Sin colisiones.
+#
+# CATÁLOGO — prefijos disjuntos: dígito, /, :
+#   N          navegar a la sesión N (ordinal en la lista)
+#   N.M        navegar a la sesión N, ventana M
+#   /          búsqueda inline por nombre (modo _SEARCH_MODE, ver handle_key)
+#   :kill      matar el item bajo el cursor (sesión o ventana)
+#   :new       crear nueva sesión en el servidor activo
+#   :rename X  renombrar el item bajo el cursor a X
 _exec_cmd() {
-  local _c="$1" _snum="" _wnum=""
-  [[ "$_c" == :* ]] && _c="${_c#:}"
-  if [[ "$_c" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+  local _c="$1"
+
+  case "$_c" in
+    # ── :kill — matar sesión o ventana bajo el cursor ─────────────────────
+    :kill|:k)
+      local _ci="${ITEMS_FLAT[$SELECTED]:-}"
+      local _ct="${_ci%%|*}" _cr="${_ci#*|}"
+      if [[ "$_ct" == "S" ]]; then
+        local _srv="${_cr%%|*}" _sess="${_cr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" kill-session -t "$_sess" 2>/dev/null
+      elif [[ "$_ct" == "W" ]]; then
+        local _srv="${_cr%%|*}" _wr="${_cr#*|}"
+        local _sess="${_wr%%|*}" _wid="${_wr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" kill-window -t "${_sess}:${_wid}" 2>/dev/null
+      fi
+      touch "$DIRTY_FILE"
+      return ;;
+
+    # ── :new — crear nueva sesión en el servidor activo ───────────────────
+    :new)
+      "${OUTER_TMUX[@]}" new-session -d 2>/dev/null
+      touch "$DIRTY_FILE"
+      return ;;
+
+    # ── :rename X — renombrar sesión o ventana bajo el cursor ─────────────
+    :rename\ *)
+      local _newname="${_c#:rename }"
+      [[ -z "$_newname" ]] && return
+      local _ci="${ITEMS_FLAT[$SELECTED]:-}"
+      local _ct="${_ci%%|*}" _cr="${_ci#*|}"
+      if [[ "$_ct" == "S" ]]; then
+        local _srv="${_cr%%|*}" _sess="${_cr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" rename-session -t "$_sess" "$_newname" 2>/dev/null
+      elif [[ "$_ct" == "W" ]]; then
+        local _srv="${_cr%%|*}" _wr="${_cr#*|}"
+        local _sess="${_wr%%|*}" _wid="${_wr#*|}"
+        local _tcmd=("${OUTER_TMUX[@]}")
+        [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
+        "${_tcmd[@]}" rename-window -t "${_sess}:${_wid}" "$_newname" 2>/dev/null
+      fi
+      touch "$DIRTY_FILE"
+      return ;;
+
+  esac
+
+  # ── Navegación numérica: N o N.M ─────────────────────────────────────────
+  local _snum="" _wnum="" _cn="$_c"
+  [[ "$_cn" == :* ]] && _cn="${_cn#:}"
+  if [[ "$_cn" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
     _snum="${BASH_REMATCH[1]}"; _wnum="${BASH_REMATCH[2]}"
-  elif [[ "$_c" =~ ^[0-9]+$ ]]; then
-    _snum="$_c"
+  elif [[ "$_cn" =~ ^[0-9]+$ ]]; then
+    _snum="$_cn"
   else
     return
   fi
-  printf 'exec_cmd: c=%s snum=%s wnum=%s items=%d\n' "$_c" "$_snum" "$_wnum" "${#ITEMS_FLAT[@]}" >> /tmp/sidebar_debug.log
-  local _di=0; for _dit in "${ITEMS_FLAT[@]}"; do printf '  [%d] %s\n' "$_di" "$_dit" >> /tmp/sidebar_debug.log; ((_di++)); done
 
   # Encontrar la sesión en posición ordinal _snum
   local _n=0 _ii=0 _si=-1
@@ -745,7 +812,6 @@ _exec_cmd() {
   local _ssess="${_sr#*|}"
 
   if [[ -n "$_wnum" ]]; then
-    # Encontrar ventana en posición ordinal _wnum dentro de la sesión
     local _wn=0 _wi=$(( _si + 1 )) _wfound=-1
     while [[ $_wi -lt ${#ITEMS_FLAT[@]} ]]; do
       local _wit="${ITEMS_FLAT[$_wi]}"
@@ -772,7 +838,6 @@ _exec_cmd() {
     SELECTED=$_si
     jump_to "${_ssrv}|${_ssess}"
     [[ "$_ssrv" == "$OUTER_SERVER" ]] && printf '%s' "$_ssess" > "${STATE_DIR}/current_session"
-    # Encontrar ventana activa de la sesión destino
     local _active_win; _active_win=$("${OUTER_TMUX[@]}" list-windows -t "$_ssess" \
       -F '#{window_active}|#{window_index}' 2>/dev/null | awk -F'|' '$1=="1"{print $2; exit}')
     [[ -n "$_active_win" ]] && _ensure_sidebar "${_ssess}:${_active_win}"
@@ -899,8 +964,10 @@ handle_key() {
   case "$key" in
     $'\x1e') ;; # wake-up
 
-    # `:` activa el modo comando explícito (estilo vim/tmux)
+    # `:`, `/` y dígitos activan el buffer directamente (ver catálogo de comandos)
     ":") _CMD_BUF=":" ;;
+    "/") _CMD_BUF="/" ;;
+    [0-9]) _CMD_BUF="$key" ;;
 
     # `/` activa el modo búsqueda inline
     "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
