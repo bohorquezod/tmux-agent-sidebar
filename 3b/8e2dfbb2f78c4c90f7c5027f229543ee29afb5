@@ -1,0 +1,23 @@
+scripts/daemon.sh
+  ai_agent 11,15,18,194-196,210-242,260
+scripts/toggle.sh
+  ai_agent 10-11,39-46
+scripts/summary.sh
+  ai_agent 1-34
+CLAUDE.md
+  ai_agent 41
+README.md
+  ai_agent 46-92
+scripts/click.sh
+  ai_agent 35-38,97-104
+scripts/sidebar.sh
+  ai_agent 102-105,117,252-257,403,414-492,516-533,535,537,539,588,695-718,720-721,729-746,748-802,804-805,860-867,968-1007,1016,1018-1022,1140-1141
+scripts/server-start.sh
+  ai_agent 26-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "3b8e2dfbb2f78c4c90f7c5027f229543ee29afb5",
+  "prompts": {}
+}
