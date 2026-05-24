@@ -96,7 +96,10 @@ _SPIN_FRAME=0
 _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0
 _CMD_BUF=""
-_CMD_FILTER=""
+_SEARCH_MODE=0
+_SEARCH_QUERY=""
+_SEARCH_SEL=0
+_SEARCH_ITEMS=()
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
@@ -390,7 +393,7 @@ render() {
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _k2=0
   for _wi2 in "${_W_icon[@]}"; do
     case "$_wi2" in
-      "⚡") (( _wc++ )) ;;
+      "⚡") (( _wc++ )); _HAS_WORKING=1 ;;
       "⏸") (( _ic_raw++ )) ;;
       "·")  (( _ec++ )) ;;
     esac
@@ -400,6 +403,85 @@ render() {
     fi
     (( _k2++ ))
   done
+
+  # ── Modo búsqueda inline ─────────────────────────────────────────────────────
+  if [[ "$_SEARCH_MODE" == "1" ]]; then
+    local _ql _fit _ftype _frest _fname _fl _si2 _stotal
+    _ql=$(printf '%s' "$_SEARCH_QUERY" | tr '[:upper:]' '[:lower:]')
+    _SEARCH_ITEMS=()
+    for _fit in "${ITEMS_FLAT[@]}"; do
+      _ftype="${_fit%%|*}"; _frest="${_fit#*|}"
+      _fname=""
+      if [[ "$_ftype" == "S" ]]; then
+        _fname="${_frest#*|}"
+      elif [[ "$_ftype" == "W" ]]; then
+        local _fsrv="${_frest%%|*}" _fwr="${_frest#*|}"
+        local _fss="${_fwr%%|*}" _fwid="${_fwr#*|}" _kk=0
+        for _ws3 in "${_W_srv[@]}"; do
+          if [[ "$_ws3" == "$_fsrv" && "${_W_sess[$_kk]}" == "$_fss" && "${_W_widx[$_kk]}" == "$_fwid" ]]; then
+            _fname="${_W_name[$_kk]}"; break
+          fi
+          (( _kk++ ))
+        done
+      fi
+      _fl=$(printf '%s' "$_fname" | tr '[:upper:]' '[:lower:]')
+      if [[ -z "$_ql" || "$_fl" == *"$_ql"* ]]; then
+        _SEARCH_ITEMS+=("$_fit")
+      fi
+    done
+
+    _stotal=${#_SEARCH_ITEMS[@]}
+    [[ $_SEARCH_SEL -ge $_stotal && $_stotal -gt 0 ]] && _SEARCH_SEL=$(( _stotal - 1 ))
+    [[ $_SEARCH_SEL -lt 0 ]] && _SEARCH_SEL=0
+
+    local buf="" mapbuf=""
+    buf="${PU} ◈${R}  /${YL}${_SEARCH_QUERY}${GR}▌${R}"$'\n'
+    mapbuf=$'\n'
+    buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+
+    if [[ $_stotal -eq 0 ]]; then
+      buf+="${GR} (sin resultados)${R}"$'\n'; mapbuf+=$'\n'
+    else
+      _si2=0
+      for _fit in "${_SEARCH_ITEMS[@]}"; do
+        _ftype="${_fit%%|*}"; _frest="${_fit#*|}"
+        local _fc="$GR" _fcur=" "
+        [[ $_si2 -eq $_SEARCH_SEL ]] && { _fc="$YL"; _fcur="›"; }
+        if [[ "$_ftype" == "S" ]]; then
+          local _fsess="${_frest#*|}"
+          local _sessd="${_fsess:0:$max}"
+          [[ ${#_fsess} -gt $max ]] && _sessd="${_fsess:0:$(( max - 1 ))}…"
+          buf+="${_fc}${_fcur}   ${_sessd}${R}"$'\n'
+          mapbuf+="${_frest%%|*}|${_fsess}"$'\n'
+        elif [[ "$_ftype" == "W" ]]; then
+          local _fsrv2="${_frest%%|*}" _fwr2="${_frest#*|}"
+          local _fss2="${_fwr2%%|*}" _fwid2="${_fwr2#*|}" _wn2="" _kk2=0
+          for _ws4 in "${_W_srv[@]}"; do
+            if [[ "$_ws4" == "$_fsrv2" && "${_W_sess[$_kk2]}" == "$_fss2" && "${_W_widx[$_kk2]}" == "$_fwid2" ]]; then
+              _wn2="${_W_name[$_kk2]}"; break
+            fi
+            (( _kk2++ ))
+          done
+          local _maxn2=$(( max - 3 )) _wdisp2
+          [[ ${#_wn2} -gt $_maxn2 ]] && _wdisp2="${_wn2:0:$(( _maxn2 - 1 ))}…" || _wdisp2="${_wn2:0:$_maxn2}"
+          buf+="${_fc}${_fcur}   ${_wdisp2}${R}"$'\n'
+          mapbuf+="${_fsrv2}|${_fss2}|${_fwid2}"$'\n'
+        fi
+        (( _si2++ ))
+      done
+    fi
+
+    buf+=$'\n'; mapbuf+=$'\n'
+    buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+    buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
+    buf+="${GR} [jk]nav [↵]go [Esc]cancel${R}"$'\n'
+    mapbuf+=$'\n\n'
+
+    printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
+    mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
+    printf '\033[H\033[J%s' "$buf"
+    return
+  fi
 
   # Detectar sesión padre del cursor (para resaltado blanco en modo ventana)
   local _cursor_parent_item=""
@@ -421,62 +503,11 @@ render() {
     _drill_wnum="${BASH_REMATCH[2]}"
   fi
 
-  # ── Filtro activo: /query en buffer (live) o _CMD_FILTER persistido ─────────
-  local _active_filter=""
-  if [[ "$_CMD_BUF" == /* ]]; then
-    _active_filter="${_CMD_BUF#/}"
-  elif [[ -n "$_CMD_FILTER" ]]; then
-    _active_filter="$_CMD_FILTER"
-  fi
-
-  # ── Pre-calcular items visibles cuando hay filtro activo ──────────────────
-  local _fvis=()
-  if [[ -n "$_active_filter" ]]; then
-    local _fii=0
-    for _fit in "${ITEMS_FLAT[@]}"; do _fvis+=("0"); (( _fii++ )); done
-    _fii=0
-    for _fit in "${ITEMS_FLAT[@]}"; do
-      local _ftype="${_fit%%|*}" _frest="${_fit#*|}"
-      if [[ "$_ftype" == "S" ]]; then
-        local _fsess="${_frest#*|}"
-        if [[ "$_fsess" == *"$_active_filter"* ]]; then
-          _fvis[$_fii]=1
-          local _fwi=$(( _fii + 1 ))
-          while [[ $_fwi -lt ${#ITEMS_FLAT[@]} && "${ITEMS_FLAT[$_fwi]%%|*}" == "W" ]]; do
-            _fvis[$_fwi]=1; (( _fwi++ ))
-          done
-        else
-          local _fwi=$(( _fii + 1 )) _fsess_marked=0
-          while [[ $_fwi -lt ${#ITEMS_FLAT[@]} && "${ITEMS_FLAT[$_fwi]%%|*}" == "W" ]]; do
-            local _fwr="${ITEMS_FLAT[$_fwi]#*|}"
-            local _fwsrv="${_fwr%%|*}" _fwrest="${_fwr#*|}"
-            local _fwsess="${_fwrest%%|*}" _fwid="${_fwrest#*|}"
-            local _fwk=0 _fwname=""
-            for _fwws in "${_W_srv[@]}"; do
-              if [[ "$_fwws" == "$_fwsrv" && "${_W_sess[$_fwk]}" == "$_fwsess" && "${_W_widx[$_fwk]}" == "$_fwid" ]]; then
-                _fwname="${_W_name[$_fwk]}"; break
-              fi
-              (( _fwk++ ))
-            done
-            if [[ "$_fwname" == *"$_active_filter"* ]]; then
-              [[ $_fsess_marked -eq 0 ]] && { _fvis[$_fii]=1; _fsess_marked=1; }
-              _fvis[$_fwi]=1
-            fi
-            (( _fwi++ ))
-          done
-        fi
-      fi
-      (( _fii++ ))
-    done
-  fi
-
   # ── Construir buffer de display ───────────────────────────────────────────
   local buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
 
   if [[ -n "$_CMD_BUF" ]]; then
     buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}"$'\n'
-  elif [[ -n "$_CMD_FILTER" ]]; then
-    buf+="${PU} ◈${R}  ${GR}/${_CMD_FILTER}${R}"$'\n'
   else
     buf+="${PU} ◈${R}  Claude"$'\n'
   fi
@@ -485,11 +516,6 @@ render() {
 
   for _item in "${ITEMS_FLAT[@]}"; do
     local _itype="${_item%%|*}" _irest="${_item#*|}"
-
-    # Saltar items que no coinciden con el filtro activo
-    if [[ -n "$_active_filter" && "${_fvis[$_ii]:-0}" != "1" ]]; then
-      (( _ii++ )); continue
-    fi
 
     if [[ "$_itype" == "S" ]]; then
       local _srv="${_irest%%|*}" _sess="${_irest#*|}"
@@ -640,7 +666,7 @@ render() {
   [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
   buf+="${GR}${sep}${R}"$'\n'
   buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
-  buf+="${GR} [jk]nav [JK]mv [↵]go${R}"$'\n'
+  buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
   buf+="${GR} [hl]mode [r]↺ [q]✕${R}"$'\n'
   mapbuf+=$'\n\n\n'
 
@@ -652,17 +678,18 @@ render() {
 # ── Catálogo de comandos del command buffer ───────────────────────────────────
 #
 # DISEÑO:
-#   1. `:`, `/` y dígitos activan el buffer automáticamente (como vim/fzf).
-#      Los dígitos son el flujo más frecuente (N y N.M); no queremos prefijo extra.
+#   1. `:` y dígitos activan el command buffer (estilo vim/tmux).
+#      Los dígitos son el flujo más frecuente (N y N.M); no requieren prefijo.
 #      ESC cancela el buffer y vuelve al modo normal.
-#   2. Shortcuts de una letra (r, q, j, k, J, K, h, l) viven FUERA del buffer
-#      (modo navegación). Dentro del buffer se escriben como texto literal.
-#      Separar navegación de comandos evita colisiones y es predecible.
+#   2. `/` activa el modo búsqueda inline (_SEARCH_MODE) con navegación j/k
+#      y Enter para navegar al resultado — no usa _CMD_BUF.
+#   3. Shortcuts de una letra (r, q, j, k, J, K, h, l) viven FUERA del buffer
+#      (modo navegación). Dentro del buffer son texto literal. Sin colisiones.
 #
-# CATÁLOGO — sin colisiones por diseño (prefijos disjuntos: dígito, /, :):
+# CATÁLOGO — prefijos disjuntos: dígito, /, :
 #   N          navegar a la sesión N (ordinal en la lista)
 #   N.M        navegar a la sesión N, ventana M
-#   /query     filtrar sesiones y ventanas por nombre (substring, live)
+#   /          búsqueda inline por nombre (modo _SEARCH_MODE, ver handle_key)
 #   :kill      matar el item bajo el cursor (sesión o ventana)
 #   :new       crear nueva sesión en el servidor activo
 #   :rename X  renombrar el item bajo el cursor a X
@@ -716,10 +743,6 @@ _exec_cmd() {
       touch "$DIRTY_FILE"
       return ;;
 
-    # ── /query — filtrar por nombre (live preview en render) ──────────────
-    /*)
-      _CMD_FILTER="${_c#/}"
-      return ;;
   esac
 
   # ── Navegación numérica: N o N.M ─────────────────────────────────────────
@@ -844,6 +867,46 @@ handle_key() {
     return
   fi
 
+  # ── Modo búsqueda inline ─────────────────────────────────────────────────────
+  if [[ "$_SEARCH_MODE" == "1" ]]; then
+    case "$key" in
+      $'\x1e') ;;
+      $'\x7f'|$'\x08')
+        _SEARCH_QUERY="${_SEARCH_QUERY%?}"; _SEARCH_SEL=0 ;;
+      $'\n'|$'\r')
+        local _stotal=${#_SEARCH_ITEMS[@]}
+        if [[ $_stotal -gt 0 && $_SEARCH_SEL -lt $_stotal ]]; then
+          local _sit="${_SEARCH_ITEMS[$_SEARCH_SEL]}"
+          local _stype="${_sit%%|*}" _srest="${_sit#*|}"
+          if [[ "$_stype" == "S" ]]; then
+            local _srv="${_srest%%|*}" _sess="${_srest#*|}"
+            jump_to "${_srv}|${_sess}"
+            [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+          elif [[ "$_stype" == "W" ]]; then
+            local _srv="${_srest%%|*}" _wr="${_srest#*|}"
+            local _sess="${_wr%%|*}" _win="${_wr#*|}"
+            jump_to "${_srv}|${_sess}|${_win}"
+            [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+            printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
+          fi
+          local _sfi=0
+          for _sfit in "${ITEMS_FLAT[@]}"; do
+            [[ "$_sfit" == "$_sit" ]] && { SELECTED=$_sfi; break; }; (( _sfi++ ))
+          done
+        fi
+        _SEARCH_MODE=0; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+      ESC)
+        _SEARCH_MODE=0; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+      j|DOWN)
+        [[ $(( _SEARCH_SEL + 1 )) -lt ${#_SEARCH_ITEMS[@]} ]] && (( _SEARCH_SEL++ )) ;;
+      k|UP)
+        [[ $_SEARCH_SEL -gt 0 ]] && (( _SEARCH_SEL-- )) ;;
+      *)
+        if [[ ${#key} -eq 1 ]]; then _SEARCH_QUERY+="$key"; _SEARCH_SEL=0; fi ;;
+    esac
+    return
+  fi
+
   # ── Modo navegación normal ────────────────────────────────────────────────
   local _cur_item="${ITEMS_FLAT[$SELECTED]:-}"
   local _cur_type="${_cur_item%%|*}"
@@ -856,6 +919,9 @@ handle_key() {
     ":") _CMD_BUF=":" ;;
     "/") _CMD_BUF="/" ;;
     [0-9]) _CMD_BUF="$key" ;;
+
+    # `/` activa el modo búsqueda inline
+    "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
 
     r|R)
       kill "$_ANIMATOR_PID" 2>/dev/null
@@ -922,9 +988,8 @@ handle_key() {
         [[ $_next -lt $_total && "${ITEMS_FLAT[$_next]%%|*}" == "W" ]] && SELECTED=$_next
       fi ;;
 
-    # ← / h / Esc — limpiar filtro activo y/o volver al header S
+    # ← / h / Esc — volver al header S: caminar atrás hasta el primer S
     LEFT|h|ESC)
-      _CMD_FILTER=""
       if [[ "$_cur_type" == "W" ]]; then
         local _si=$SELECTED
         while (( _si > 0 )); do
