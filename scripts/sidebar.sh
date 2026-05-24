@@ -565,7 +565,10 @@ render() {
           done
           local _sic="$GR"; [[ "$_is_cur" == "1" ]] && _sic="$CY"
           local _srvd="${_srv:0:$max}"; [[ ${#_srv} -gt $max ]] && _srvd="${_srv:0:$(( max-1 ))}…"
-          buf+="${_sic}◎ ${_srvd}${R}"$'\n'; mapbuf+=$'\n'
+          local _fill_len=$(( W - 4 - ${#_srvd} ))
+          local _fill=""
+          [[ $_fill_len -gt 0 ]] && _fill=$(printf '─%.0s' $(seq 1 $_fill_len))
+          buf+="${_sic}── ${_srvd} ${_fill}${R}"$'\n'; mapbuf+=$'\n'
         fi
         prev_server="$_srv"
       fi
