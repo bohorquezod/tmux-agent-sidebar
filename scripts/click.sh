@@ -32,7 +32,10 @@ _src_win=$($TMUXBIN display-message  -p '#I' 2>/dev/null)
 _src_w=$($TMUXBIN list-panes -t "${_src_sess}:${_src_win}" \
   -F '#{pane_dead}|#{pane_title}|#{pane_width}' 2>/dev/null \
   | awk -F'|' '$1!="1" && $2=="Sessions" {print $3; exit}')
-[[ -n "$_src_w" ]] && printf '%s' "$_src_w" > "${STATE_DIR}/sidebar_width"
+_srv_key="${CURRENT_SERVER//[^a-zA-Z0-9_-]/_}"
+_width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+[[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+[[ -n "$_src_w" ]] && printf '%s' "$_src_w" > "$_width_f"
 
 _tmux_target="$TARGET_SESS"
 [[ -n "$TARGET_WIN" ]] && _tmux_target="${TARGET_SESS}:${TARGET_WIN}"
@@ -91,8 +94,14 @@ if [[ -n "$LIVE_PANE" ]]; then
   fi
 fi
 
-SIDEBAR_W=$(cat "${STATE_DIR}/sidebar_width" 2>/dev/null)
-[[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]] && SIDEBAR_W=28
+_srv_key="${CURRENT_SERVER//[^a-zA-Z0-9_-]/_}"
+_width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
+[[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
+SIDEBAR_W=$(cat "$_width_f" 2>/dev/null)
+if [[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]]; then
+  SIDEBAR_W=$($TMUXBIN show-option -gqv @agent-sidebar-width 2>/dev/null)
+  [[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]] && SIDEBAR_W=28
+fi
 
 if [[ -n "$LIVE_PANE" ]]; then
   # Sidebar real corriendo: igualar ancho al origen y darle foco
