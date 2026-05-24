@@ -97,6 +97,10 @@ _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0
 _CMD_BUF=""
 _KILL_PENDING=""
+_SEARCH_MODE=0
+_SEARCH_QUERY=""
+_SEARCH_SEL=0
+_SEARCH_ITEMS=()
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
@@ -449,7 +453,7 @@ render() {
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _k2=0
   for _wi2 in "${_W_icon[@]}"; do
     case "$_wi2" in
-      "⚡") (( _wc++ )) ;;
+      "⚡") (( _wc++ )); _HAS_WORKING=1 ;;
       "⏸") (( _ic_raw++ )) ;;
       "·")  (( _ec++ )) ;;
     esac
@@ -459,6 +463,85 @@ render() {
     fi
     (( _k2++ ))
   done
+
+  # ── Modo búsqueda inline ─────────────────────────────────────────────────────
+  if [[ "$_SEARCH_MODE" == "1" ]]; then
+    local _ql _fit _ftype _frest _fname _fl _si2 _stotal
+    _ql=$(printf '%s' "$_SEARCH_QUERY" | tr '[:upper:]' '[:lower:]')
+    _SEARCH_ITEMS=()
+    for _fit in "${ITEMS_FLAT[@]}"; do
+      _ftype="${_fit%%|*}"; _frest="${_fit#*|}"
+      _fname=""
+      if [[ "$_ftype" == "S" ]]; then
+        _fname="${_frest#*|}"
+      elif [[ "$_ftype" == "W" ]]; then
+        local _fsrv="${_frest%%|*}" _fwr="${_frest#*|}"
+        local _fss="${_fwr%%|*}" _fwid="${_fwr#*|}" _kk=0
+        for _ws3 in "${_W_srv[@]}"; do
+          if [[ "$_ws3" == "$_fsrv" && "${_W_sess[$_kk]}" == "$_fss" && "${_W_widx[$_kk]}" == "$_fwid" ]]; then
+            _fname="${_W_name[$_kk]}"; break
+          fi
+          (( _kk++ ))
+        done
+      fi
+      _fl=$(printf '%s' "$_fname" | tr '[:upper:]' '[:lower:]')
+      if [[ -z "$_ql" || "$_fl" == *"$_ql"* ]]; then
+        _SEARCH_ITEMS+=("$_fit")
+      fi
+    done
+
+    _stotal=${#_SEARCH_ITEMS[@]}
+    [[ $_SEARCH_SEL -ge $_stotal && $_stotal -gt 0 ]] && _SEARCH_SEL=$(( _stotal - 1 ))
+    [[ $_SEARCH_SEL -lt 0 ]] && _SEARCH_SEL=0
+
+    local buf="" mapbuf=""
+    buf="${PU} ◈${R}  /${YL}${_SEARCH_QUERY}${GR}▌${R}"$'\n'
+    mapbuf=$'\n'
+    buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+
+    if [[ $_stotal -eq 0 ]]; then
+      buf+="${GR} (sin resultados)${R}"$'\n'; mapbuf+=$'\n'
+    else
+      _si2=0
+      for _fit in "${_SEARCH_ITEMS[@]}"; do
+        _ftype="${_fit%%|*}"; _frest="${_fit#*|}"
+        local _fc="$GR" _fcur=" "
+        [[ $_si2 -eq $_SEARCH_SEL ]] && { _fc="$YL"; _fcur="›"; }
+        if [[ "$_ftype" == "S" ]]; then
+          local _fsess="${_frest#*|}"
+          local _sessd="${_fsess:0:$max}"
+          [[ ${#_fsess} -gt $max ]] && _sessd="${_fsess:0:$(( max - 1 ))}…"
+          buf+="${_fc}${_fcur}   ${_sessd}${R}"$'\n'
+          mapbuf+="${_frest%%|*}|${_fsess}"$'\n'
+        elif [[ "$_ftype" == "W" ]]; then
+          local _fsrv2="${_frest%%|*}" _fwr2="${_frest#*|}"
+          local _fss2="${_fwr2%%|*}" _fwid2="${_fwr2#*|}" _wn2="" _kk2=0
+          for _ws4 in "${_W_srv[@]}"; do
+            if [[ "$_ws4" == "$_fsrv2" && "${_W_sess[$_kk2]}" == "$_fss2" && "${_W_widx[$_kk2]}" == "$_fwid2" ]]; then
+              _wn2="${_W_name[$_kk2]}"; break
+            fi
+            (( _kk2++ ))
+          done
+          local _maxn2=$(( max - 3 )) _wdisp2
+          [[ ${#_wn2} -gt $_maxn2 ]] && _wdisp2="${_wn2:0:$(( _maxn2 - 1 ))}…" || _wdisp2="${_wn2:0:$_maxn2}"
+          buf+="${_fc}${_fcur}   ${_wdisp2}${R}"$'\n'
+          mapbuf+="${_fsrv2}|${_fss2}|${_fwid2}"$'\n'
+        fi
+        (( _si2++ ))
+      done
+    fi
+
+    buf+=$'\n'; mapbuf+=$'\n'
+    buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+    buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
+    buf+="${GR} [jk]nav [↵]go [Esc]cancel${R}"$'\n'
+    mapbuf+=$'\n\n'
+
+    printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
+    mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
+    printf '\033[H\033[J%s' "$buf"
+    return
+  fi
 
   # Detectar sesión padre del cursor (para resaltado blanco en modo ventana)
   local _cursor_parent_item=""
@@ -650,7 +733,7 @@ render() {
     buf+="${RD} [x]confirm kill · [ESC]cancel${R}"$'\n'
     buf+="${GR} [jk]nav [hl]mode [r]↺ [q]✕${R}"$'\n'
   else
-    buf+="${GR} [jk]nav [JK]mv [↵]go${R}"$'\n'
+    buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
     buf+="${GR} [hl]mode [r]↺ [x]kill [q]✕${R}"$'\n'
   fi
   mapbuf+=$'\n\n\n'
@@ -787,6 +870,46 @@ handle_key() {
     return
   fi
 
+  # ── Modo búsqueda inline ─────────────────────────────────────────────────────
+  if [[ "$_SEARCH_MODE" == "1" ]]; then
+    case "$key" in
+      $'\x1e') ;;
+      $'\x7f'|$'\x08')
+        _SEARCH_QUERY="${_SEARCH_QUERY%?}"; _SEARCH_SEL=0 ;;
+      $'\n'|$'\r')
+        local _stotal=${#_SEARCH_ITEMS[@]}
+        if [[ $_stotal -gt 0 && $_SEARCH_SEL -lt $_stotal ]]; then
+          local _sit="${_SEARCH_ITEMS[$_SEARCH_SEL]}"
+          local _stype="${_sit%%|*}" _srest="${_sit#*|}"
+          if [[ "$_stype" == "S" ]]; then
+            local _srv="${_srest%%|*}" _sess="${_srest#*|}"
+            jump_to "${_srv}|${_sess}"
+            [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+          elif [[ "$_stype" == "W" ]]; then
+            local _srv="${_srest%%|*}" _wr="${_srest#*|}"
+            local _sess="${_wr%%|*}" _win="${_wr#*|}"
+            jump_to "${_srv}|${_sess}|${_win}"
+            [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+            printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
+          fi
+          local _sfi=0
+          for _sfit in "${ITEMS_FLAT[@]}"; do
+            [[ "$_sfit" == "$_sit" ]] && { SELECTED=$_sfi; break; }; (( _sfi++ ))
+          done
+        fi
+        _SEARCH_MODE=0; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+      ESC)
+        _SEARCH_MODE=0; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+      j|DOWN)
+        [[ $(( _SEARCH_SEL + 1 )) -lt ${#_SEARCH_ITEMS[@]} ]] && (( _SEARCH_SEL++ )) ;;
+      k|UP)
+        [[ $_SEARCH_SEL -gt 0 ]] && (( _SEARCH_SEL-- )) ;;
+      *)
+        if [[ ${#key} -eq 1 ]]; then _SEARCH_QUERY+="$key"; _SEARCH_SEL=0; fi ;;
+    esac
+    return
+  fi
+
   # ── Modo navegación normal ────────────────────────────────────────────────
   local _cur_item="${ITEMS_FLAT[$SELECTED]:-}"
   local _cur_type="${_cur_item%%|*}"
@@ -800,6 +923,9 @@ handle_key() {
 
     # `:` activa el modo comando explícito (estilo vim/tmux)
     ":") _CMD_BUF=":" ;;
+
+    # `/` activa el modo búsqueda inline
+    "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
 
     r|R)
       kill "$_ANIMATOR_PID" 2>/dev/null
