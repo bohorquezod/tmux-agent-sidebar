@@ -574,7 +574,7 @@ render() {
       fi
 
       local _cursor=" " _ic="$GR" _nc=""
-      [[ $_ii -eq $SELECTED ]] && { _cursor="›"; _ic="$YL"; }
+      [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && { _cursor="›"; _ic="$YL"; }
       if [[ "$_is_act" == "1" ]]; then
         _cursor="▶"; _nc="$BG"
         [[ $_ii -eq $SELECTED ]] && _ic="$YL" || _ic="$BG"
