@@ -840,6 +840,7 @@ _exec_cmd() {
     local _wsess="${_wr2%%|*}"
     local _wid="${_wr2#*|}"
     SELECTED=$_wfound
+    CURSOR_ITEM="${ITEMS_FLAT[$_wfound]}"
     jump_to "${_wsrv}|${_wsess}|${_wid}"
     [[ "$_wsrv" == "$OUTER_SERVER" ]] && printf '%s' "$_wsess" > "${STATE_DIR}/current_session"
     printf '%s' "${_wsrv}|${_wsess}:${_wid}" > "${STATE_DIR}/just_visited"
@@ -848,6 +849,7 @@ _exec_cmd() {
     [[ -n "$POPUP_MODE" ]] && exit 0
   else
     SELECTED=$_si
+    CURSOR_ITEM="${ITEMS_FLAT[$_si]}"
     jump_to "${_ssrv}|${_ssess}"
     [[ "$_ssrv" == "$OUTER_SERVER" ]] && printf '%s' "$_ssess" > "${STATE_DIR}/current_session"
     local _active_win; _active_win=$("${OUTER_TMUX[@]}" list-windows -t "$_ssess" \
