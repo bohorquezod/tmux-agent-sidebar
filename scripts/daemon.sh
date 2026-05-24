@@ -136,8 +136,15 @@ build_data() {
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
       -F '#{pane_id}|#{session_name}|#{window_index}|#{pane_current_command}|#{pane_title}' 2>/dev/null)
 
-    # Capturas en paralelo — incluye el sidebar para no romper índices, pero se descarta abajo
+    # Capturas en paralelo — omite panes cuyo título ya codifica estado Claude o cuyo comando es shell conocido
     while IFS='|' read -r _pid _s _w _c _pt; do
+      case "$_c" in zsh|bash|sh|fish|dash) continue ;; esac
+      if [[ -n "$_pt" ]]; then
+        _fc="${_pt:0:1}"
+        if [[ "$_fc" == "✳" ]]; then continue; fi
+        _hex=$(LC_ALL=C printf '%s' "$_fc" | od -A n -t x1 | tr -d ' \n')
+        case "$_hex" in e2a0*|e2a1*|e2a2*|e2a3*) continue ;; esac
+      fi
       $TMUXBIN "${_sargs[@]}" capture-pane -t "$_pid" -p \
         > "$_tmpdir/${_server}_${_pid//[^a-zA-Z0-9]/_}" 2>/dev/null &
     done <<< "$_PANES"
