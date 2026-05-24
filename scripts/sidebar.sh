@@ -791,13 +791,13 @@ render() {
   buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
   if [[ -n "$POPUP_MODE" ]]; then
     buf+="${GR} [jk]nav [↵]go·close${R}"$'\n'
-    buf+="${GR} [hl]mode [q][Esc]✕${R}"$'\n'
+    buf+="${GR} [:]cmd [q][Esc]✕${R}"$'\n'
   elif [[ -n "$_KILL_PENDING" ]]; then
     buf+="${RD} [x]confirm kill · [ESC]cancel${R}"$'\n'
-    buf+="${GR} [jk]nav [hl]mode [R]↺ [q]✕${R}"$'\n'
+    buf+="${GR} [jk]nav [:]cmd [hl]mode [R]↺ [q]✕${R}"$'\n'
   else
     buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
-    buf+="${GR} [hl]mode [p]👁 [x]kill [r]ren [R]↺ [q]✕${R}"$'\n'
+    buf+="${GR} [:]cmd [hl]mode [p]👁 [x]kill [r]ren [R]↺ [q]✕${R}"$'\n'
   fi
   mapbuf+=$'\n\n\n'
 
@@ -1100,13 +1100,10 @@ handle_key() {
   case "$key" in
     $'\x1e') ;; # wake-up
 
-    # `:`, `/` y dígitos activan el buffer directamente (ver catálogo de comandos)
+    # `:` y dígitos activan el command buffer; `/` activa búsqueda inline
     ":") _CMD_BUF=":" ;;
-    "/") _CMD_BUF="/" ;;
-    [0-9]) _CMD_BUF="$key" ;;
-
-    # `/` activa el modo búsqueda inline
     "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
+    [0-9]) _CMD_BUF="$key" ;;
 
     R)
       kill "$_ANIMATOR_PID" 2>/dev/null
