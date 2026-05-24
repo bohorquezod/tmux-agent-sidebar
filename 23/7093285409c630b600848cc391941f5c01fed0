@@ -1,0 +1,9 @@
+scripts/daemon.sh
+  ai_agent 11,15,18,139,141-147,213-215,229-261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "237093285409c630b600848cc391941f5c01fed0",
+  "prompts": {}
+}
