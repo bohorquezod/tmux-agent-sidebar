@@ -259,12 +259,31 @@ has_clients() {
   return 1
 }
 
-LAST_BUILD=0
+LAST_BUILD=-999  # fuerza el primer build inmediatamente
+HAS_WORKING=false
+
 while true; do
   _SB=false
   [[ -f "$DIRTY_FILE" ]] && { rm -f "$DIRTY_FILE"; _SB=true; }
-  (( SECONDS - LAST_BUILD >= 2 )) && _SB=true
-  [[ "$_SB" == true ]] && { build_data; build_summary; LAST_BUILD=$SECONDS; }
+
+  if [[ "$HAS_WORKING" == true ]]; then
+    # Ventanas activas: rebuild para animar el spinner (~5 FPS)
+    _SB=true
+    _SLEEP=0.2
+  else
+    # Sin ventanas activas: fallback poll cada 3s (los hooks cubren los eventos)
+    (( SECONDS - LAST_BUILD >= 3 )) && _SB=true
+    _SLEEP=3
+  fi
+
+  if [[ "$_SB" == true ]]; then
+    build_data
+    build_summary
+    LAST_BUILD=$SECONDS
+    HAS_WORKING=false
+    grep -q '|⚡|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
+  fi
+
   has_clients || exit 0
-  sleep 0.3
+  sleep "$_SLEEP"
 done

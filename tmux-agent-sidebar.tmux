@@ -7,9 +7,9 @@ DIRTY_FILE="$STATE_DIR/dirty"
 mkdir -p "$STATE_DIR"
 
 # Registrar hooks solo una vez por servidor tmux (evita duplicados al hacer source-file)
-if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "1" ]; then
-  tmux set-option -g @claude_sidebar_hooks "1"
-  for hook in after-new-session session-closed after-new-window window-unlinked after-rename-window; do
+if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "2" ]; then
+  tmux set-option -g @claude_sidebar_hooks "2"
+  for hook in session-created session-closed after-rename-session after-new-window window-unlinked after-rename-window; do
     tmux set-hook -ga "$hook" "run-shell 'touch \"$DIRTY_FILE\" 2>/dev/null'"
   done
   # Rastrear sesión activa del cliente para el indicador ▶ en el sidebar
