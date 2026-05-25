@@ -1,0 +1,80 @@
+scripts/sidebar.sh
+  s_bb4fc6746a8009::t_5382e0162cf575 7
+  s_bb4fc6746a8009::t_570e08f6363d84 12-13
+  s_bb4fc6746a8009::t_cf489aacb42cb3 55
+  s_bb4fc6746a8009::t_f7689fcfa9f938 66
+  s_bb4fc6746a8009::t_da6a63e92f2ce8 67-68
+  s_f7bfdcf403b29f::t_58dc01f264bfae 122
+  s_8b98f9f986b37a::t_15ca6a4ae456e3 152-166,168-187,189-196
+  s_bb4fc6746a8009::t_16c6d3dd050fd5 167
+  s_bb4fc6746a8009::t_48ef29c35c5f14 188
+  s_f7bfdcf403b29f::t_6e631425704de0 345-361,363-375,378-379
+  s_10cd377910e74a::t_4f15c97b704a83 362
+  s_f7bfdcf403b29f::t_9c5f660fbf327d 376-377
+  s_f7bfdcf403b29f::t_8c4cd603c8041f 382
+  s_bb4fc6746a8009::t_d9a1a3b5a7dbe5 407-408
+  s_bb4fc6746a8009::t_a5d9ba7c3f8aaa 416,418-427
+  s_f7bfdcf403b29f::t_bf4bc5b32c0c07 952
+  s_bb4fc6746a8009::t_e9486a0c384aa0 1196-1197
+  s_bb4fc6746a8009::t_d24e06618d905f 1220-1222
+  s_f7bfdcf403b29f::t_0116ebb41acf47 1318,1320
+  s_f7bfdcf403b29f::t_6cf3cefb3bd339 1319,1321,1362-1363
+  s_f7bfdcf403b29f::t_c9bc7d6272eed6 1375,1377
+  s_f7bfdcf403b29f::t_88eb4525ea1c23 1376
+  s_bb4fc6746a8009::t_a88899230fd7d6 1499
+  s_8b98f9f986b37a::t_251fd6031cba8c 1517-1522
+  s_bb4fc6746a8009::t_d09e008ce8a838 1546,1551
+  s_bb4fc6746a8009::t_2a3b2453cffafb 1550
+  s_bb4fc6746a8009::t_c3ed8cc26d27f2 1553
+scripts/click.sh
+  s_bb4fc6746a8009::t_d06b21e3311c10 43-50
+tmux-agent-sidebar.tmux
+  s_bb4fc6746a8009::t_f3adbcfbc1766e 34-36
+scripts/reload-all.sh
+  s_bb4fc6746a8009::t_11002f9a3dafbd 24-25,27-28
+  s_f7bfdcf403b29f::t_225be8c97b20c5 26
+scripts/daemon.sh
+  s_bb4fc6746a8009::t_278655d7b32a13 274-281,285,301-302,304,307-308
+scripts/server-start.sh
+  s_bb4fc6746a8009::t_bb8c71072a2985 48-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "66d9ecf41e6326d5d5ed81f38aaf3ea06a465dd2",
+  "prompts": {},
+  "sessions": {
+    "s_10cd377910e74a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4e86d35c-b9f7-4f5c-bb3c-35c6f42a1e9d",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_8b98f9f986b37a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "54b6a9e9-c8c0-4c93-bea3-c75dd657f162",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_bb4fc6746a8009": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c89cc87-eb85-47c5-b32e-2161607c559b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_f7bfdcf403b29f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "abf97adf-6870-4443-bc1e-47646eb048a4",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
