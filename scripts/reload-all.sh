@@ -21,5 +21,9 @@ rm -f "${STATE_DIR}/animator_active"
 rm -f "${STATE_DIR}/clients/sidebar-server"
 sleep 0.2
 
-# 4. Recrear servidor sidebar limpio
+# 4. Resetear guard de hooks y re-registrar (necesario para que nuevos hooks se apliquen)
+tmux set-option -gu @claude_sidebar_hooks 2>/dev/null
+bash "$PLUGIN_DIR/tmux-agent-sidebar.tmux"
+
+# 5. Recrear servidor sidebar limpio
 bash "$PLUGIN_DIR/scripts/server-start.sh"

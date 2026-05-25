@@ -4,9 +4,13 @@
 # Deshabilitar echo y asegurar que \n produzca \r\n (ONLCR) en la pty.
 # Evita que keypresses se muestren como texto durante las transiciones de exec.
 stty -echo onlcr 2>/dev/null
+printf '\033[?7l'  # deshabilitar auto-wrap: evita que el contenido antiguo se doble al achicar el pane
+shopt -s checkwinsize 2>/dev/null  # bash actualiza $COLUMNS/$LINES en cada SIGWINCH
 
 PLUGIN_DIR="${PLUGIN_DIR:-$(cd -P "$(dirname "$0")/.." && pwd)}"
 TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+PLUGIN_VERSION="$(cat "$PLUGIN_DIR/VERSION" 2>/dev/null | tr -d '[:space:]')"
+[[ -z "$PLUGIN_VERSION" ]] && PLUGIN_VERSION="dev"
 STATE_DIR="${STATE_DIR:-${TMPDIR:-/tmp}/agent-sidebar}"
 DATA_FILE="${STATE_DIR}/data"
 DIRTY_FILE="${STATE_DIR}/dirty"
@@ -48,6 +52,7 @@ printf '%s'  "$PANE_ID" > "$STATE_FILE"
 _RELOADING=0
 _ANIMATOR_PID=0
 _sidebar_cleanup() {
+  printf '\033[?7h'  # re-habilitar auto-wrap al salir
   kill "$_ANIMATOR_PID" 2>/dev/null
   rm -f "$CLIENTS_DIR/$CLIENT_KEY" "$STATE_FILE" "${STATE_DIR}/animator_active"
   if [[ -z "$OUTER_TMUX_SOCKET" && "$_RELOADING" != "1" ]]; then
@@ -58,6 +63,9 @@ trap '_sidebar_cleanup' EXIT INT TERM
 trap '_RELOADING=1; kill "$_ANIMATOR_PID" 2>/dev/null; exec "$0"' USR1
 _WAKE=0
 trap '_WAKE=1' USR2
+_WINCH=0
+_RESIZE=0
+trap '_WINCH=1; _RESIZE=1' WINCH
 
 # Animator: despierta el read -t 1 cada 200ms cuando hay ventanas working → spinner a ~5 FPS
 _start_animator() {
@@ -111,6 +119,7 @@ _RENAME_ITEM=""   # ITEMS_FLAT entry under rename
 _RENAME_BUF=""    # rename edit buffer (initialized with current name)
 _RENAME_TYPE=""   # "S" or "W"
 _FILTER_STATUS="" # active icon filter: "working" | "idle" | "unread" | ""
+_HELP_MODE=0
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
@@ -138,6 +147,51 @@ jump_to() {
   else
     "$TMUXBIN" -S "$SOCKET_DIR/$_srv" switch-client -t "$_t" 2>/dev/null
   fi
+}
+
+# ── Salto rápido: siguiente working (w) / siguiente unread (u) ────────────────
+jump_next_working() {
+  local _total=${#ITEMS_FLAT[@]}
+  [[ $_total -eq 0 ]] && return
+  local _start=$(( SELECTED + 1 )) _tries _i _item _type _irest _srv _wrest _sess _widx _icon
+  for (( _tries=0; _tries<_total; _tries++ )); do
+    _i=$(( (_start + _tries) % _total ))
+    _item="${ITEMS_FLAT[$_i]}"; _type="${_item%%|*}"
+    [[ "$_type" != "W" ]] && continue
+    _irest="${_item#*|}"; _srv="${_irest%%|*}"; _wrest="${_irest#*|}"
+    _sess="${_wrest%%|*}"; _widx="${_wrest#*|}"
+    _icon=$(awk -F'|' -v s="$_srv" -v e="$_sess" -v w="$_widx" \
+      '$1=="W"&&$2==s&&$3==e&&$4==w{print $6;exit}' "$DATA_FILE" 2>/dev/null)
+    if [[ "$_icon" == "⚡" ]]; then
+      SELECTED=$_i
+      [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_widx}"
+      jump_to "${_srv}|${_sess}|${_widx}"
+      [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+      return
+    fi
+  done
+}
+
+jump_next_unread() {
+  local _total=${#ITEMS_FLAT[@]}
+  [[ $_total -eq 0 ]] && return
+  local _start=$(( SELECTED + 1 )) _tries _i _item _type _irest _srv _wrest _sess _widx _key
+  for (( _tries=0; _tries<_total; _tries++ )); do
+    _i=$(( (_start + _tries) % _total ))
+    _item="${ITEMS_FLAT[$_i]}"; _type="${_item%%|*}"
+    [[ "$_type" != "W" ]] && continue
+    _irest="${_item#*|}"; _srv="${_irest%%|*}"; _wrest="${_irest#*|}"
+    _sess="${_wrest%%|*}"; _widx="${_wrest#*|}"
+    _key="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+    if [[ -f "${STATE_DIR}/${_key}.unread" ]]; then
+      SELECTED=$_i
+      [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_widx}"
+      jump_to "${_srv}|${_sess}|${_widx}"
+      [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
+      printf '%s' "${_srv}|${_sess}:${_widx}" > "${STATE_DIR}/just_visited"
+      return
+    fi
+  done
 }
 
 # ── Reordenamiento de sesiones ────────────────────────────────────────────────
@@ -288,8 +342,44 @@ _kill_current() {
   touch "$DIRTY_FILE"
 }
 
+# ── Help overlay ─────────────────────────────────────────────────────────────
+render_help() {
+  local W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] 2>/dev/null && W=28
+  local H="${LINES:-24}";   [[ "$H" -lt 4 ]] 2>/dev/null && H=24
+  local sep; sep=$(printf '─%.0s' $(seq 1 $W))
+  local buf=""
+  buf+=" ${PU}◈${R}  ${WH}Help${R}"$'\n'
+  buf+="${GR}${sep}${R}"$'\n'
+  buf+=$'\n'
+  buf+=" ${GR}Navigation${R}"$'\n'
+  buf+=" ${WH}j/↓${R}  next session/win"$'\n'
+  buf+=" ${WH}k/↑${R}  prev session/win"$'\n'
+  buf+=" ${WH}l/→${R}  enter windows"$'\n'
+  buf+=" ${WH}h/←${R}  back to session"$'\n'
+  buf+=" ${WH}↵${R}    jump to item"$'\n'
+  buf+=$'\n'
+  buf+=" ${GR}Jump${R}"$'\n'
+  buf+=" ${WH}w${R}    next working ${CY}⠿${R}"$'\n'
+  buf+=" ${WH}u${R}    next unread  ${YL}◉${R}"$'\n'
+  buf+=$'\n'
+  buf+=" ${GR}Reorder${R}"$'\n'
+  buf+=" ${WH}J${R}    move down"$'\n'
+  buf+=" ${WH}K${R}    move up"$'\n'
+  buf+=$'\n'
+  buf+=" ${GR}Other${R}"$'\n'
+  buf+=" ${WH}:${R}    command  ${GR}N / N.M${R}"$'\n'
+  buf+=" ${WH}r${R}    reload"$'\n'
+  buf+=" ${WH}q${R}    quit"$'\n'
+  buf+=$'\n'
+  buf+="${GR}${sep}${R}"$'\n'
+  buf+="${GR} ? or any key to close${R}"$'\n'
+  buf+=" ${GR}v${PLUGIN_VERSION}${R}"
+  printf '\033[H\033[J%s' "$buf"
+}
+
 # ── Render ────────────────────────────────────────────────────────────────────
 render() {
+  [[ "$_HELP_MODE" -eq 1 ]] && { render_help; return; }
   [[ ! -f "$DATA_FILE" ]] && return
 
   (( _SPIN_FRAME = (_SPIN_FRAME + 1) % 10 ))
@@ -314,14 +404,27 @@ render() {
       | awk -F'|' '$1=="1"{print $2; exit}')
   fi
 
-  local W; W=$($TMUXBIN display-message -t "$PANE_ID" -p '#{pane_width}' 2>/dev/null)
-  [[ -z "$W" ]] && W=28
-  # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho
+  local W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] 2>/dev/null && W=28
+  local H="${LINES:-24}";   [[ "$H" -lt 4 ]] 2>/dev/null && H=24
+  # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho.
+  # Durante drag activo (SIGWINCH) sincronizar todos los panes sidebar para evitar que
+  # el servidor rebote entre anchos de distintos clientes.
   local _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
   local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
   [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
   local _sw; _sw=$(cat "$_width_f" 2>/dev/null)
-  [[ "$W" != "$_sw" ]] && printf '%s' "$W" > "$_width_f"
+  if [[ "$W" != "$_sw" ]]; then
+    printf '%s' "$W" > "$_width_f"
+    printf '%s' "$W" > "${STATE_DIR}/sidebar_width"
+    if [[ "$_RESIZE" == "1" ]]; then
+      _RESIZE=0
+      "${OUTER_TMUX[@]}" list-panes -a -F '#{pane_id}|#{pane_title}|#{pane_width}' 2>/dev/null \
+        | while IFS='|' read -r _spid _spt _spw; do
+            [[ "$_spt" == "Sessions" && "$_spw" != "$W" ]] && \
+              "${OUTER_TMUX[@]}" resize-pane -t "$_spid" -x "$W" 2>/dev/null
+          done
+    fi
+  fi
   local max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
 
@@ -846,6 +949,7 @@ render() {
     buf+="${GR} [jk]nav [JK]mv [↵]go [/]find${R}"$'\n'
     buf+="${GR} [:]cmd [hl]mode [p]👁 [x]kill [r]ren [R]↺ [q]✕${R}"$'\n'
   fi
+  buf+=" ${GR}v${PLUGIN_VERSION}${R}"
   mapbuf+=$'\n\n\n'
 
   printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
@@ -1077,20 +1181,20 @@ _exec_cmd() {
     local _wid="${_wr2#*|}"
     SELECTED=$_wfound
     CURSOR_ITEM="${ITEMS_FLAT[$_wfound]}"
+    [[ "$_wsrv" == "$OUTER_SERVER" && -z "$POPUP_MODE" ]] && _ensure_sidebar "${_wsess}:${_wid}"
     jump_to "${_wsrv}|${_wsess}|${_wid}"
     [[ "$_wsrv" == "$OUTER_SERVER" ]] && printf '%s' "$_wsess" > "${STATE_DIR}/current_session"
     printf '%s' "${_wsrv}|${_wsess}:${_wid}" > "${STATE_DIR}/just_visited"
-    [[ -z "$POPUP_MODE" ]] && _ensure_sidebar "${_wsess}:${_wid}"
     $TMUXBIN send-keys -t "$PANE_ID" $'\x1e' 2>/dev/null
     [[ -n "$POPUP_MODE" ]] && exit 0
   else
     SELECTED=$_si
     CURSOR_ITEM="${ITEMS_FLAT[$_si]}"
-    jump_to "${_ssrv}|${_ssess}"
-    [[ "$_ssrv" == "$OUTER_SERVER" ]] && printf '%s' "$_ssess" > "${STATE_DIR}/current_session"
     local _active_win; _active_win=$("${OUTER_TMUX[@]}" list-windows -t "$_ssess" \
       -F '#{window_active}|#{window_index}' 2>/dev/null | awk -F'|' '$1=="1"{print $2; exit}')
-    [[ -n "$_active_win" && -z "$POPUP_MODE" ]] && _ensure_sidebar "${_ssess}:${_active_win}"
+    [[ -n "$_active_win" && "$_ssrv" == "$OUTER_SERVER" && -z "$POPUP_MODE" ]] && _ensure_sidebar "${_ssess}:${_active_win}"
+    jump_to "${_ssrv}|${_ssess}"
+    [[ "$_ssrv" == "$OUTER_SERVER" ]] && printf '%s' "$_ssess" > "${STATE_DIR}/current_session"
     $TMUXBIN send-keys -t "$PANE_ID" $'\x1e' 2>/dev/null
     [[ -n "$POPUP_MODE" ]] && exit 0
   fi
@@ -1113,6 +1217,9 @@ _ensure_sidebar() {
     -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
     | awk -F'|' '$1!="1" && $3=="Sessions"{print $2; exit}')
   if [[ -n "$_live" ]]; then
+    local _live_w; _live_w=$("${OUTER_TMUX[@]}" display-message -t "$_live" -p '#{pane_width}' 2>/dev/null)
+    [[ -n "$_live_w" && "$_live_w" != "$_sw" ]] && \
+      "${OUTER_TMUX[@]}" resize-pane -t "$_live" -x "$_sw" 2>/dev/null
     "${OUTER_TMUX[@]}" select-pane -t "$_live" 2>/dev/null
     return
   fi
@@ -1132,9 +1239,9 @@ _ensure_sidebar() {
       -F '#{pane_left}|#{pane_id}' 2>/dev/null \
       | sort -t'|' -k1 -n | head -1 | cut -d'|' -f2)
     local _tgt="${_dest}"; [[ -n "$_lp" ]] && _tgt="$_lp"
-    "${OUTER_TMUX[@]}" split-window -hb -l "$_sw" -t "$_tgt" \
-      "exec $TMUXBIN -L $_server attach-session -t $_session" 2>/dev/null
-    local _np; _np=$("${OUTER_TMUX[@]}" display-message -p '#{pane_id}' 2>/dev/null)
+    local _np; _np=$("${OUTER_TMUX[@]}" split-window -hb -l "$_sw" -t "$_tgt" \
+      -P -F '#{pane_id}' \
+      "exec $TMUXBIN -L $_server attach-session -t $_session" 2>/dev/null)
     [[ -n "$_np" ]] && "${OUTER_TMUX[@]}" select-pane -t "$_np" -T "Sessions" 2>/dev/null
   fi
 }
@@ -1208,6 +1315,12 @@ handle_key() {
     return
   fi
 
+  # ── Help overlay activo: cualquier tecla real lo descarta ────────────────
+  if [[ "$_HELP_MODE" -eq 1 ]]; then
+    [[ "$key" == $'\x1e' ]] && return
+    _HELP_MODE=0; return
+  fi
+
   # ── Modo búsqueda inline ─────────────────────────────────────────────────────
   if [[ "$_SEARCH_MODE" == "1" ]]; then
     case "$key" in
@@ -1258,6 +1371,9 @@ handle_key() {
 
   case "$key" in
     $'\x1e') ;; # wake-up
+
+    # `?` — mostrar/ocultar help overlay
+    "?") _HELP_MODE=1 ;;
 
     # `:` y dígitos activan el command buffer; `/` activa búsqueda inline
     ":") _CMD_BUF=":" ;;
@@ -1380,6 +1496,7 @@ handle_key() {
       elif [[ "$_cur_type" == "W" ]]; then
         local _srv="${_cur_rest%%|*}" _wr="${_cur_rest#*|}"
         local _sess="${_wr%%|*}" _win="${_wr#*|}"
+        [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_win}"
         jump_to "${_srv}|${_sess}|${_win}"
         [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
         printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
@@ -1396,6 +1513,12 @@ handle_key() {
 
     p)
       if [[ "$PREVIEW_MODE" == "0" ]]; then PREVIEW_MODE=1; else PREVIEW_MODE=0; fi ;;
+
+    # `w` — saltar al siguiente agente working (⚡), cíclico
+    w) jump_next_working ;;
+
+    # `u` — saltar al siguiente agente unread (◉), cíclico
+    u) jump_next_unread ;;
 
     q|Q)
       if [[ -n "$POPUP_MODE" ]]; then
@@ -1418,15 +1541,16 @@ render
 LAST_RENDER=$SECONDS
 DATA_MTIME=$(file_mtime "$DATA_FILE")
 SESS_MTIME=$(file_mtime "${STATE_DIR}/current_session")
-
 while true; do
   # Re-render cuando DATA_FILE cambia (daemon), current_session cambia (navegación),
-  # o cada 2s como fallback
+  # SIGWINCH (resize), o cada 2s como fallback
   _cur_mtime=$(file_mtime "$DATA_FILE")
   _cur_sess_mtime=$(file_mtime "${STATE_DIR}/current_session")
   if [[ "$_cur_mtime" != "$DATA_MTIME" || "$_cur_sess_mtime" != "$SESS_MTIME" \
-      || "$_WAKE" == "1" || "$_HAS_WORKING" == "1" ]] \
+      || "$_WAKE" == "1" || "$_HAS_WORKING" == "1" \
+      || "$_WINCH" == "1" ]] \
       || (( SECONDS - LAST_RENDER >= 2 )); then
+    _WINCH=0
     _WAKE=0; _HAS_WORKING=0
     DATA_MTIME="$_cur_mtime"
     SESS_MTIME="$_cur_sess_mtime"

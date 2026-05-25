@@ -40,6 +40,14 @@ _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
 _tmux_target="$TARGET_SESS"
 [[ -n "$TARGET_WIN" ]] && _tmux_target="${TARGET_SESS}:${TARGET_WIN}"
 
+# Normalizar el ancho del sidebar destino ANTES del switch para evitar el flash visual
+if [[ -n "$TARGET_WIN" && "$TARGET_SRV" == "$CURRENT_SERVER" && -n "$_src_w" ]]; then
+  _dest_live=$($TMUXBIN list-panes -t "${TARGET_SESS}:${TARGET_WIN}" \
+    -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
+    | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}')
+  [[ -n "$_dest_live" ]] && $TMUXBIN resize-pane -t "$_dest_live" -x "$_src_w" 2>/dev/null
+fi
+
 if [[ "$TARGET_SRV" == "$CURRENT_SERVER" ]]; then
   $TMUXBIN switch-client -t "$_tmux_target" 2>/dev/null
 else

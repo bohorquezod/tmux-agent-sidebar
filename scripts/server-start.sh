@@ -45,3 +45,6 @@ $TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y 5
 $TMUXBIN -L "$SERVER" set-option -g status off
 $TMUXBIN -L "$SERVER" set-option -g prefix None
 $TMUXBIN -L "$SERVER" set-option -g mouse off
+# window-size manual: el tamaño de sesión solo cambia vía resize-window explícito.
+# Evita que el sidebar rebote entre anchos de distintos clientes al hacer render.
+$TMUXBIN -L "$SERVER" set-option -g window-size manual

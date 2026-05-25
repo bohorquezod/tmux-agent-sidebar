@@ -271,6 +271,15 @@ has_clients() {
   return 1
 }
 
+notify_clients() {
+  local _f _pid
+  for _f in "$CLIENTS_DIR"/*; do
+    [[ -f "$_f" ]] || continue
+    _pid=$(<"$_f") 2>/dev/null
+    [[ -n "$_pid" ]] && kill -USR2 "$_pid" 2>/dev/null
+  done
+}
+
 LAST_BUILD=-999  # fuerza el primer build inmediatamente
 HAS_WORKING=false
 
@@ -295,6 +304,7 @@ while true; do
     LAST_BUILD=$SECONDS
     HAS_WORKING=false
     grep -q '|⚡|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
+    notify_clients
   fi
 
   has_clients || exit 0
