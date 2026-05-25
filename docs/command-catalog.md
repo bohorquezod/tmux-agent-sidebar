@@ -90,20 +90,14 @@ it does not write to `_CMD_BUF`. The display header shows `◈  /query▌`.
 When the query does not match a status keyword, results are filtered by name
 (session name or window name, case-insensitive substring match).
 
-### Status filtering
+### Decision: `/` is always name search — status filtering lives in command buffer
 
-When the query matches one of the reserved status keywords below, results show
-only sessions that have at least one window in that state, and only those
-windows are listed under each session.
+`/query` always filters by name (session or window name, case-insensitive
+substring). It never intercepts reserved words, so searching for a session
+literally named "working" works correctly.
 
-| Query      | Filters to                              |
-| ---------- | --------------------------------------- |
-| `working`  | Windows currently running (⚡ icon)     |
-| `idle`     | Windows awaiting input (○ icon)         |
-| `unread`   | Windows with unread notifications (◉)   |
-
-Status keywords are matched exactly (not as substrings). Typing `work` does not
-trigger status filtering — it filters by the literal string `work` in the name.
+Status filtering is a separate operation reached via the command buffer:
+`:filter <status>`. See the command catalog below.
 
 ### Decision: `/` activates search mode directly — not via `_CMD_BUF`
 
@@ -131,10 +125,9 @@ All characters typed go into `_CMD_BUF`. `Enter` executes the buffer content.
 | `:kill [N[.M]]`      | `:k`     | Kill target; uses cursor if target is omitted       |
 | `:new`               | —        | Create a new session on the active server           |
 | `:rename [N[.M]] X`  | —        | Rename target to X; uses cursor if target omitted   |
-| `:move N up`         | —        | Move session N one position up                      |
-| `:move N down`       | —        | Move session N one position down                    |
-| `:move N.M up`       | —        | Move window M of session N one position up          |
-| `:move N.M down`     | —        | Move window M of session N one position down        |
+| `:move N N2`         | —        | Move session N to position N2                       |
+| `:move N.M N2.M2`   | —        | Move window N.M to position N2.M2                   |
+| `:filter <status>`   | —        | Show only sessions/windows matching status          |
 
 ### Target resolution for `:kill` and `:rename`
 
@@ -153,11 +146,33 @@ Examples:
 :rename 2.3 newname   → renames window 3 of session 2 to "newname"
 ```
 
-### Decision: `:move` for reordering via command buffer
+### Decision: `:move` uses source→target positions
 
-`J`/`K` hotkeys reorder the item under the cursor. `:move N up/down` and
-`:move N.M up/down` expose the same operation through the command buffer,
-allowing reordering by number without moving the cursor first.
+`J`/`K` hotkeys move the item under the cursor one step at a time. `:move`
+accepts an explicit source and destination so any item can jump to any position
+in a single command — no cursor movement required.
+
+```
+:move 2 4       → moves session 2 to position 4
+:move 1.3 1.1   → moves window 1.3 to position 1.1 (first window of session 1)
+```
+
+The destination is always interpreted as an ordinal in the same list (sessions
+for session moves, windows within the same session for window moves).
+
+### Decision: `:filter` for status filtering — not `/`
+
+`/query` is always a name search. To filter by icon state, use `:filter` in
+the command buffer:
+
+| Command            | Shows                                              |
+| ------------------ | -------------------------------------------------- |
+| `:filter working`  | Sessions with at least one ⚡ window; those windows only |
+| `:filter idle`     | Sessions with at least one ○ window; those windows only |
+| `:filter unread`   | Sessions with at least one ◉ window; those windows only |
+
+`:filter` replaces the normal session/window list until cancelled with `ESC`
+or another `:filter` call. It does not conflict with name search.
 
 ### Decision: prefixes are disjoint — no ambiguity with letters
 
@@ -194,11 +209,11 @@ handled in two modes simultaneously.
 | Issue | Feature             | Scope of change in `sidebar.sh`                                         |
 | ----- | ------------------- | ----------------------------------------------------------------------- |
 | #1    | Inline search `/`   | Remove `"/") _CMD_BUF="/" ;;`; keep only the `_SEARCH_MODE=1` path     |
-| #1    | Status filters      | In search render: detect `working`/`idle`/`unread` and filter by icon  |
+| #1    | `:filter <status>`  | Add `:filter` case in `_exec_cmd`; filter `ITEMS_FLAT` by icon in render |
 | #2    | Kill shortcut `x`   | Add `"x") _exec_cmd :kill ;;` in navigation-mode `case`                |
 | #2    | `:kill [N[.M]]`     | Parse optional target in `_exec_cmd`; fall back to cursor              |
 | #3    | Rename shortcut `r` | Split `r|R` reload: `R` reloads, `r` sets `_CMD_BUF=":rename "`        |
 | #3    | `:rename [N[.M]] X` | Parse optional target in `_exec_cmd`; fall back to cursor              |
 | #14   | Mode separation `:` | Already implemented; this document is the deliverable                   |
-| #14   | `:move N [up/down]` | Add `:move` case in `_exec_cmd`; reuse `move_session_*`/`move_window_*`|
+| #14   | `:move N N2`        | Add `:move` case in `_exec_cmd`; compute delta and call move_* in loop |
 | #14   | Live command hint   | In `render()`: after `_CMD_BUF` header line, add one hint line         |
