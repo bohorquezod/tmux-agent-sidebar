@@ -8,12 +8,14 @@ export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 DATA_FILE="${STATE_DIR}/data"
+SUMMARY_FILE="${STATE_DIR}/summary"
 DIRTY_FILE="${STATE_DIR}/dirty"
 PID_FILE="${STATE_DIR}/daemon.pid"
 CLIENTS_DIR="${STATE_DIR}/clients"
+CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
 
-mkdir -p "$STATE_DIR" "$CLIENTS_DIR"
+mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
 # El PID se guarda DENTRO del lock dir para eliminar la ventana de race entre
@@ -134,8 +136,15 @@ build_data() {
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
       -F '#{pane_id}|#{session_name}|#{window_index}|#{pane_current_command}|#{pane_title}' 2>/dev/null)
 
-    # Capturas en paralelo — incluye el sidebar para no romper índices, pero se descarta abajo
+    # Capturas en paralelo — omite panes cuyo título ya codifica estado Claude o cuyo comando es shell conocido
     while IFS='|' read -r _pid _s _w _c _pt; do
+      case "$_c" in zsh|bash|sh|fish|dash) continue ;; esac
+      if [[ -n "$_pt" ]]; then
+        _fc="${_pt:0:1}"
+        if [[ "$_fc" == "✳" ]]; then continue; fi
+        _hex=$(LC_ALL=C printf '%s' "$_fc" | od -A n -t x1 | tr -d ' \n')
+        case "$_hex" in e2a0*|e2a1*|e2a2*|e2a3*) continue ;; esac
+      fi
       $TMUXBIN "${_sargs[@]}" capture-pane -t "$_pid" -p \
         > "$_tmpdir/${_server}_${_pid//[^a-zA-Z0-9]/_}" 2>/dev/null &
     done <<< "$_PANES"
@@ -163,8 +172,20 @@ build_data() {
       [[ "$_sfound" == false ]] && _sess_sorted+=("$_se")
     done
 
+    local _hidden_raw; _hidden_raw=$(cat "${STATE_DIR}/hidden_sessions" 2>/dev/null)
+
     for _sess_entry in "${_sess_sorted[@]}"; do
       local _sess="${_sess_entry%%|*}" _attached="${_sess_entry#*|}"
+
+      # Saltar sesiones en la lista de hidden_sessions (separadas por espacios)
+      if [[ -n "$_hidden_raw" ]]; then
+        local _skip=false _hs
+        for _hs in $_hidden_raw; do
+          [[ "$_sess" == "$_hs" ]] && { _skip=true; break; }
+        done
+        [[ "$_skip" == true ]] && continue
+      fi
+
       local _is_active=0; [[ "${_attached:-0}" -gt 0 ]] && _is_active=1
 
       # Recopilar ventanas del session para saber cuál es la última
@@ -189,6 +210,9 @@ build_data() {
         local _lines="" _ck="${_capid//[^a-zA-Z0-9]/_}"
         [[ -n "$_capid" && -f "$_tmpdir/${_server}_${_ck}" ]] && _lines=$(<"$_tmpdir/${_server}_${_ck}")
 
+        local _cap_key="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+        printf '%s' "$_lines" > "${CAPTURES_DIR}/${_cap_key}"
+
         local _icon; _icon=$(detect_icon "$_capcmd" "$_lines" "$_captitle")
         local _islast=0; (( _wj + 1 >= _wtotal )) && _islast=1
         _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_islast}"$'\n'
@@ -200,6 +224,39 @@ build_data() {
   rm -rf "$_tmpdir"
   printf '%s' "$_buf" > "${DATA_FILE}.tmp"
   mv "${DATA_FILE}.tmp" "$DATA_FILE"
+}
+
+# ── Build summary token ───────────────────────────────────────────────────────
+# Escribe ${STATE_DIR}/summary con conteos compactos de estado de agentes.
+# También actualiza la user-option @agent_sidebar_summary en el servidor actual
+# para que el usuario pueda referenciarla con #{@agent_sidebar_summary}.
+
+build_summary() {
+  local _working=0 _idle=0 _unread=0
+  local _type _server _sess _widx _wname _icon _islast _f
+
+  if [[ -f "$DATA_FILE" ]]; then
+    while IFS='|' read -r _type _server _sess _widx _wname _icon _islast; do
+      [[ "$_type" == "W" ]] || continue
+      [[ "$_icon" == "⚡" ]] && (( _working++ ))
+      [[ "$_icon" == "⏸" ]] && (( _idle++ ))
+    done < "$DATA_FILE"
+  fi
+
+  for _f in "$STATE_DIR"/*.unread; do
+    [[ -f "$_f" ]] && (( _unread++ ))
+  done
+
+  local _token=""
+  [[ $_working -gt 0 ]] && _token+="⚡${_working} "
+  [[ $_idle    -gt 0 ]] && _token+="⏸${_idle} "
+  [[ $_unread  -gt 0 ]] && _token+="◉${_unread} "
+  _token="${_token% }"
+
+  printf '%s' "$_token" > "${SUMMARY_FILE}.tmp"
+  mv "${SUMMARY_FILE}.tmp" "$SUMMARY_FILE"
+
+  $TMUXBIN set-option -gq @agent_sidebar_summary "$_token" 2>/dev/null || true
 }
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -214,12 +271,32 @@ has_clients() {
   return 1
 }
 
-LAST_BUILD=0
+LAST_BUILD=-999  # fuerza el primer build inmediatamente
+HAS_WORKING=false
+
 while true; do
+  _interval=$(cat "${STATE_DIR}/refresh_interval" 2>/dev/null)
+  [[ "$_interval" =~ ^[0-9]+$ ]] || _interval=2
+
   _SB=false
   [[ -f "$DIRTY_FILE" ]] && { rm -f "$DIRTY_FILE"; _SB=true; }
-  (( SECONDS - LAST_BUILD >= 2 )) && _SB=true
-  [[ "$_SB" == true ]] && { build_data; LAST_BUILD=$SECONDS; }
+
+  if [[ "$HAS_WORKING" == true ]]; then
+    _SB=true
+    _SLEEP=0.2
+  else
+    (( SECONDS - LAST_BUILD >= _interval )) && _SB=true
+    _SLEEP=$_interval
+  fi
+
+  if [[ "$_SB" == true ]]; then
+    build_data
+    build_summary
+    LAST_BUILD=$SECONDS
+    HAS_WORKING=false
+    grep -q '|⚡|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
+  fi
+
   has_clients || exit 0
-  sleep 0.3
+  sleep "$_SLEEP"
 done
