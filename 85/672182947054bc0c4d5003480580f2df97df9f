@@ -1,0 +1,19 @@
+docs/command-catalog.md
+  s_2255c1119f365e::t_8953ddd6ac4b5d 19-38,65-66,88-107,119-120,127-160,167,197,199,201,203-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "85672182947054bc0c4d5003480580f2df97df9f",
+  "prompts": {},
+  "sessions": {
+    "s_2255c1119f365e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5c75d3fb-1b77-4079-806a-f0eabb509bd1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
