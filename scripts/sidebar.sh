@@ -110,6 +110,7 @@ _SEARCH_ITEMS=()
 _RENAME_ITEM=""   # ITEMS_FLAT entry under rename
 _RENAME_BUF=""    # rename edit buffer (initialized with current name)
 _RENAME_TYPE=""   # "S" or "W"
+_FILTER_STATUS="" # active icon filter: "working" | "idle" | "unread" | ""
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
@@ -599,13 +600,42 @@ render() {
 
   if [[ -n "$_CMD_BUF" ]]; then
     buf+="${PU} ◈${R}  ${YL}${_CMD_BUF}${GR}▌${R}${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
+    mapbuf+=$'\n'
+    local _hint; _hint=$(_cmd_hint "$_CMD_BUF")
+    if [[ -n "$_hint" ]]; then
+      buf+="${GR}  · ${_hint}${R}"$'\n'; mapbuf+=$'\n'
+    fi
   elif [[ -n "$_RENAME_ITEM" ]]; then
     buf+="${PU} ◈${R}  ${CY}Rename:${R} ${YL}${_RENAME_BUF}${GR}▌${R}${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
+    mapbuf+=$'\n'
   else
     buf+="${PU} ◈${R}  Claude${_hdr_spaces}${GR}${_mode_label}${R}"$'\n'
+    mapbuf+=$'\n'
+    if [[ -n "$_FILTER_STATUS" ]]; then
+      buf+="${YL}  ⟨filter: ${_FILTER_STATUS}⟩${GR} [ESC]clear${R}"$'\n'; mapbuf+=$'\n'
+    fi
   fi
-  mapbuf+=$'\n'
   buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
+
+  # Pre-scan para filtro de estado: construir lista de sesiones con ventanas matching
+  local _filt_skeys=""
+  if [[ -n "$_FILTER_STATUS" ]]; then
+    local _fk=0
+    for _wi2 in "${_W_icon[@]}"; do
+      local _fmatch=0
+      case "$_FILTER_STATUS" in
+        working) [[ "$_wi2" == "⚡" ]] && _fmatch=1 ;;
+        idle)
+          local _fkey2="${_W_srv[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_fk]}"
+          [[ "$_wi2" != "·" && "$_wi2" != "⚡" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
+        unread)
+          local _fkey2="${_W_srv[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_fk]}"
+          [[ -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
+      esac
+      [[ "$_fmatch" == "1" ]] && _filt_skeys+=" ${_W_srv[$_fk]}|${_W_sess[$_fk]}"
+      (( _fk++ ))
+    done
+  fi
 
   for _item in "${ITEMS_FLAT[@]}"; do
     local _itype="${_item%%|*}" _irest="${_item#*|}"
@@ -614,6 +644,11 @@ render() {
       local _srv="${_irest%%|*}" _sess="${_irest#*|}"
 
       (( _sess_num++ ))
+
+      # Filtro de estado: saltar sesiones sin ventanas matching
+      if [[ -n "$_FILTER_STATUS" && "$_filt_skeys" != *" ${_srv}|${_sess}"* ]]; then
+        (( _ii++ )); continue
+      fi
 
       # En drill-down: saltar sesiones que no coinciden
       if [[ "$_drill_mode" == "1" ]]; then
@@ -689,6 +724,18 @@ render() {
         fi
         (( _k++ ))
       done
+
+      # Filtro de estado: saltar ventanas que no coinciden
+      if [[ -n "$_FILTER_STATUS" ]]; then
+        local _fwkey="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+        local _fwmatch=0
+        case "$_FILTER_STATUS" in
+          working) [[ "$_wicon" == "⚡" ]] && _fwmatch=1 ;;
+          idle)    [[ "$_wicon" != "·" && "$_wicon" != "⚡" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+          unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+        esac
+        [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
+      fi
 
       # ── Unread tracking ──────────────────────────────────────────────────────
       local _key="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
@@ -806,32 +853,76 @@ render() {
   printf '\033[H\033[J%s' "$buf"
 }
 
+# ── Live command hint ─────────────────────────────────────────────────────────
+# Devuelve una línea de ayuda para el partial _CMD_BUF actual.
+_cmd_hint() {
+  local _b="$1"
+  [[ ${#_b} -lt 2 ]] && return  # `:` solo no muestra hint
+  if [[ "$_b" =~ ^:?[0-9]+\.[0-9] ]]; then
+    printf ':N.M — navigate to session N, window M'
+  elif [[ "$_b" =~ ^:?[0-9]+$ ]]; then
+    printf ':N — navigate to session N'
+  elif [[ ":filter" == "${_b%%[^:a-z]*}"* && ${#_b} -ge 3 ]]; then
+    printf ':filter working|idle|unread — show matching windows'
+  elif [[ ":kill" == "${_b%%[^:a-kl]*}"* ]]; then
+    printf ':kill [N[.M]] — kill session or window'
+  elif [[ ":move" == "${_b%%[^:a-mov]*}"* ]]; then
+    printf ':move N N2 — reorder session or window'
+  elif [[ ":new" == "${_b%%[^:a-new]*}"* ]]; then
+    printf ':new — create new session'
+  elif [[ ":rename" == "${_b%%[^:a-ren]*}"* ]]; then
+    printf ':rename [N[.M]] <name> — rename session or window'
+  fi
+}
+
+# ── Resolver item por ordinal (N o N.M) desde ITEMS_FLAT ─────────────────────
+# Salida: escribe en las variables globales _ri_ci, _ri_ct, _ri_cr
+# Retorna 1 si no encuentra el item.
+_resolve_ordinal() {
+  local _snum="$1" _wnum="${2:-}"
+  _ri_ci=""; _ri_ct=""; _ri_cr=""
+  local _n=0 _ii=0 _si=-1
+  for _it in "${ITEMS_FLAT[@]}"; do
+    [[ "${_it%%|*}" == "S" ]] && { (( _n++ )); [[ $_n -eq $_snum ]] && { _si=$_ii; break; }; }
+    (( _ii++ ))
+  done
+  [[ $_si -lt 0 ]] && return 1
+  if [[ -z "$_wnum" ]]; then
+    _ri_ci="${ITEMS_FLAT[$_si]}"; _ri_ct="S"; _ri_cr="${_ri_ci#*|}"; return 0
+  fi
+  local _wn=0 _wi=$(( _si + 1 )) _wfound=-1
+  while [[ $_wi -lt ${#ITEMS_FLAT[@]} ]]; do
+    local _wit="${ITEMS_FLAT[$_wi]}"
+    [[ "${_wit%%|*}" == "S" ]] && break
+    [[ "${_wit%%|*}" == "W" ]] && { (( _wn++ )); [[ $_wn -eq $_wnum ]] && { _wfound=$_wi; break; }; }
+    (( _wi++ ))
+  done
+  [[ $_wfound -lt 0 ]] && return 1
+  _ri_ci="${ITEMS_FLAT[$_wfound]}"; _ri_ct="W"; _ri_cr="${_ri_ci#*|}"; return 0
+}
+_ri_ci="" _ri_ct="" _ri_cr=""
+
 # ── Catálogo de comandos del command buffer ───────────────────────────────────
-#
-# DISEÑO:
-#   1. `:` y dígitos activan el command buffer (estilo vim/tmux).
-#      Los dígitos son el flujo más frecuente (N y N.M); no requieren prefijo.
-#      ESC cancela el buffer y vuelve al modo normal.
-#   2. `/` activa el modo búsqueda inline (_SEARCH_MODE) con navegación j/k
-#      y Enter para navegar al resultado — no usa _CMD_BUF.
-#   3. Shortcuts de una letra (r, q, j, k, J, K, h, l) viven FUERA del buffer
-#      (modo navegación). Dentro del buffer son texto literal. Sin colisiones.
-#
-# CATÁLOGO — prefijos disjuntos: dígito, /, :
-#   N          navegar a la sesión N (ordinal en la lista)
-#   N.M        navegar a la sesión N, ventana M
-#   /          búsqueda inline por nombre (modo _SEARCH_MODE, ver handle_key)
-#   :kill      matar el item bajo el cursor (sesión o ventana)
-#   :new       crear nueva sesión en el servidor activo
-#   :rename X  renombrar el item bajo el cursor a X
 _exec_cmd() {
   local _c="$1"
+  # Separar comando y args
+  local _cmd="${_c%% *}" _args=""
+  [[ "$_c" == *" "* ]] && _args="${_c#"$_cmd" }"
 
-  case "$_c" in
-    # ── :kill — matar sesión o ventana bajo el cursor ─────────────────────
+  case "$_cmd" in
+
+    # ── :kill [N[.M]] — matar sesión o ventana ───────────────────────────
     :kill|:k)
-      local _ci="${ITEMS_FLAT[$SELECTED]:-}"
-      local _ct="${_ci%%|*}" _cr="${_ci#*|}"
+      local _ci _ct _cr
+      if [[ "$_args" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+        _resolve_ordinal "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" || return
+        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"
+      elif [[ "$_args" =~ ^([0-9]+)$ ]]; then
+        _resolve_ordinal "${BASH_REMATCH[1]}" || return
+        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"
+      else
+        _ci="${ITEMS_FLAT[$SELECTED]:-}"; _ct="${_ci%%|*}"; _cr="${_ci#*|}"
+      fi
       if [[ "$_ct" == "S" ]]; then
         local _srv="${_cr%%|*}" _sess="${_cr#*|}"
         local _tcmd=("${OUTER_TMUX[@]}")
@@ -844,21 +935,31 @@ _exec_cmd() {
         [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
         "${_tcmd[@]}" kill-window -t "${_sess}:${_wid}" 2>/dev/null
       fi
-      touch "$DIRTY_FILE"
-      return ;;
+      touch "$DIRTY_FILE"; return ;;
 
-    # ── :new — crear nueva sesión en el servidor activo ───────────────────
+    # ── :new — crear nueva sesión en el servidor activo ──────────────────
     :new)
       "${OUTER_TMUX[@]}" new-session -d 2>/dev/null
-      touch "$DIRTY_FILE"
-      return ;;
+      touch "$DIRTY_FILE"; return ;;
 
-    # ── :rename X — renombrar sesión o ventana bajo el cursor ─────────────
-    :rename\ *)
-      local _newname="${_c#:rename }"
+    # ── :rename [N[.M]] X — renombrar sesión o ventana ───────────────────
+    :rename)
+      [[ -z "$_args" ]] && return
+      # Detectar target opcional al inicio de _args
+      local _ci _ct _cr _newname="$_args"
+      local _first="${_args%% *}"
+      if [[ "$_first" =~ ^([0-9]+)\.([0-9]+)$ && "$_args" == *" "* ]]; then
+        _resolve_ordinal "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" || return
+        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"
+        _newname="${_args#"$_first" }"
+      elif [[ "$_first" =~ ^([0-9]+)$ && "$_args" == *" "* ]]; then
+        _resolve_ordinal "${BASH_REMATCH[1]}" || return
+        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"
+        _newname="${_args#"$_first" }"
+      else
+        _ci="${ITEMS_FLAT[$SELECTED]:-}"; _ct="${_ci%%|*}"; _cr="${_ci#*|}"
+      fi
       [[ -z "$_newname" ]] && return
-      local _ci="${ITEMS_FLAT[$SELECTED]:-}"
-      local _ct="${_ci%%|*}" _cr="${_ci#*|}"
       if [[ "$_ct" == "S" ]]; then
         local _srv="${_cr%%|*}" _sess="${_cr#*|}"
         local _tcmd=("${OUTER_TMUX[@]}")
@@ -871,7 +972,65 @@ _exec_cmd() {
         [[ "$_srv" != "$OUTER_SERVER" ]] && _tcmd=("$TMUXBIN" -S "$SOCKET_DIR/$_srv")
         "${_tcmd[@]}" rename-window -t "${_sess}:${_wid}" "$_newname" 2>/dev/null
       fi
-      touch "$DIRTY_FILE"
+      touch "$DIRTY_FILE"; return ;;
+
+    # ── :move N N2 / N.M N2.M2 — reordenar por posición ─────────────────
+    :move)
+      local _src="${_args%% *}" _dst="${_args#"$_src" }"
+      [[ -z "$_src" || -z "$_dst" || "$_src" == "$_dst" ]] && return
+      if [[ "$_src" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+        # Mover ventana N.M → N2.M2
+        local _ss="${BASH_REMATCH[1]}" _sw="${BASH_REMATCH[2]}"
+        [[ "$_dst" =~ ^([0-9]+)\.([0-9]+)$ ]] || return
+        local _ds="${BASH_REMATCH[1]}" _dw="${BASH_REMATCH[2]}"
+        # Encontrar índice en ITEMS_FLAT de la ventana src
+        local _n=0 _ii=0 _si=-1
+        for _it in "${ITEMS_FLAT[@]}"; do
+          [[ "${_it%%|*}" == "S" ]] && { (( _n++ )); [[ $_n -eq $_ss ]] && _si=$_ii; }
+          (( _ii++ ))
+        done
+        [[ $_si -lt 0 ]] && return
+        local _wn=0 _wi=$(( _si + 1 )) _src_idx=-1
+        while [[ $_wi -lt ${#ITEMS_FLAT[@]} ]]; do
+          [[ "${ITEMS_FLAT[$_wi]%%|*}" == "S" ]] && break
+          [[ "${ITEMS_FLAT[$_wi]%%|*}" == "W" ]] && { (( _wn++ )); [[ $_wn -eq $_sw ]] && _src_idx=$_wi; }
+          (( _wi++ ))
+        done
+        [[ $_src_idx -lt 0 ]] && return
+        # Calcular ventana destino ordinal dentro de la misma sesión
+        # Para cruzar sesiones usaríamos move-window; aquí solo reordenamos dentro de la misma
+        local _delta=$(( _dw - _sw ))
+        if [[ $_delta -gt 0 ]]; then
+          local _d=0; while [[ $_d -lt $_delta ]]; do move_window_down $_src_idx; (( _src_idx++ )); (( _d++ )); done
+        elif [[ $_delta -lt 0 ]]; then
+          local _d=0; local _ad=$(( -_delta ))
+          while [[ $_d -lt $_ad ]]; do move_window_up $_src_idx; (( _src_idx-- )); (( _d++ )); done
+        fi
+      elif [[ "$_src" =~ ^([0-9]+)$ ]]; then
+        # Mover sesión N → N2
+        [[ "$_dst" =~ ^([0-9]+)$ ]] || return
+        local _sn="${BASH_REMATCH[1]}"  # dst session ordinal
+        local _src_sn="${_src}"
+        local _sf_src=$(( _src_sn - 1 )) _sf_dst=$(( _sn - 1 ))
+        [[ $_sf_src -lt 0 || $_sf_dst -lt 0 || $_sf_src -ge ${#SESSIONS_FLAT[@]} ]] && return
+        [[ $_sf_dst -ge ${#SESSIONS_FLAT[@]} ]] && _sf_dst=$(( ${#SESSIONS_FLAT[@]} - 1 ))
+        local _delta=$(( _sf_dst - _sf_src ))
+        CURSOR_ITEM="${SESSIONS_FLAT[$_sf_src]}"
+        if [[ $_delta -gt 0 ]]; then
+          local _d=0; while [[ $_d -lt $_delta ]]; do move_session_down $_sf_src; (( _sf_src++ )); (( _d++ )); done
+        elif [[ $_delta -lt 0 ]]; then
+          local _d=0; local _ad=$(( -_delta ))
+          while [[ $_d -lt $_ad ]]; do move_session_up $_sf_src; (( _sf_src-- )); (( _d++ )); done
+        fi
+      fi
+      return ;;
+
+    # ── :filter <status> — filtrar vista por estado de icono ─────────────
+    :filter)
+      case "$_args" in
+        working|idle|unread) _FILTER_STATUS="$_args" ;;
+        *) _FILTER_STATUS="" ;;
+      esac
       return ;;
 
   esac
@@ -1186,9 +1345,11 @@ handle_key() {
         [[ $_next -lt $_total && "${ITEMS_FLAT[$_next]%%|*}" == "W" ]] && SELECTED=$_next
       fi ;;
 
-    # ← / h / Esc — volver al header S: caminar atrás hasta el primer S
-    # En modo popup, Esc también cierra cuando el cursor ya está en una sesión
+    # ← / h / Esc — volver al header S; limpiar filtro activo; cerrar popup
     LEFT|h|ESC)
+      if [[ -n "$_FILTER_STATUS" && "$key" == "ESC" ]]; then
+        _FILTER_STATUS=""; return
+      fi
       if [[ "$_cur_type" == "W" ]]; then
         local _si=$SELECTED
         while (( _si > 0 )); do
