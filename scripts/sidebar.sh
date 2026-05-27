@@ -121,6 +121,12 @@ _RENAME_TYPE=""   # "S" or "W"
 _FILTER_STATUS="" # active icon filter: "working" | "idle" | "unread" | ""
 _HELP_MODE=0
 
+# Data arrays — global cache repopulado solo cuando DATA_FILE cambia
+_S_srv=() _S_cur=()
+_E_srv=() _E_sess=() _E_act=()
+_W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_last=()
+_RENDER_DATA_MTIME=""
+
 # ── Estado de navegación ──────────────────────────────────────────────────────
 # SESSIONS_FLAT: orden de sesiones (preserva J/K del usuario)
 # ITEMS_FLAT:    lista plana S|server|session y W|server|session|winidx
@@ -395,10 +401,13 @@ render() {
   # Resolver sesión y ventana activa del outer server en este ciclo de render
   local _outer_sess _outer_win
   _outer_sess=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+  local _df_mtime; _df_mtime=$(file_mtime "$DATA_FILE")
+  local _search_fast_path=0
+  [[ "$_SEARCH_MODE" == "1" && "$_df_mtime" == "$_RENDER_DATA_MTIME" && ${#ITEMS_FLAT[@]} -gt 0 ]] && _search_fast_path=1
   if [[ -z "$_outer_sess" ]]; then
     _outer_sess="${WIN_SESS:-}"
     _outer_win="${WIN_IDX:-}"
-  elif [[ -n "$_outer_sess" ]]; then
+  elif [[ "$_search_fast_path" == "0" ]]; then
     _outer_win=$("${OUTER_TMUX[@]}" list-windows -t "$_outer_sess" \
       -F '#{window_active}|#{window_index}' 2>/dev/null \
       | awk -F'|' '$1=="1"{print $2; exit}')
@@ -428,6 +437,7 @@ render() {
   local max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
 
+  if [[ "$_search_fast_path" == "0" ]]; then
   # ── Actualizar SESSIONS_FLAT ──────────────────────────────────────────────
   local _data_sess=()
   while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6; do
@@ -466,9 +476,9 @@ render() {
   fi
 
   # ── Pre-leer DATA_FILE en arrays paralelos ────────────────────────────────
-  local _S_srv=() _S_cur=()
-  local _E_srv=() _E_sess=() _E_act=()
-  local _W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_last=()
+  _S_srv=() _S_cur=()
+  _E_srv=() _E_sess=() _E_act=()
+  _W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_last=()
   while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6; do
     case "$_t" in
       S) _S_srv+=("$_f1"); _S_cur+=("$_f2") ;;
@@ -477,6 +487,7 @@ render() {
          _W_name+=("$_f4"); _W_icon+=("$_f5"); _W_last+=("$_f6") ;;
     esac
   done < "$DATA_FILE"
+  _RENDER_DATA_MTIME="$_df_mtime"
 
   # ── Construir ITEMS_FLAT en orden del usuario ─────────────────────────────
   # Preservar orden de ventanas ya en ITEMS_FLAT si el conteo no cambió
@@ -561,6 +572,7 @@ render() {
     done
     CURSOR_ITEM=""
   fi
+  fi  # end fast-path guard
   [[ $SELECTED -ge ${#ITEMS_FLAT[@]} ]] && SELECTED=$(( ${#ITEMS_FLAT[@]} - 1 ))
   [[ $SELECTED -lt 0 ]] && SELECTED=0
 
@@ -1326,7 +1338,11 @@ handle_key() {
     case "$key" in
       $'\x1e') ;;
       $'\x7f'|$'\x08')
-        _SEARCH_QUERY="${_SEARCH_QUERY%?}"; _SEARCH_SEL=0 ;;
+        if [[ -z "$_SEARCH_QUERY" ]]; then
+          _SEARCH_MODE=0; _SEARCH_SEL=0; _SEARCH_ITEMS=()
+        else
+          _SEARCH_QUERY="${_SEARCH_QUERY%?}"; _SEARCH_SEL=0
+        fi ;;
       $'\n'|$'\r')
         local _stotal=${#_SEARCH_ITEMS[@]}
         if [[ $_stotal -gt 0 && $_SEARCH_SEL -lt $_stotal ]]; then
