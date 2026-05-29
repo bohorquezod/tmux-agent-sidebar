@@ -168,7 +168,7 @@ jump_next_working() {
     _sess="${_wrest%%|*}"; _widx="${_wrest#*|}"
     _icon=$(awk -F'|' -v s="$_srv" -v e="$_sess" -v w="$_widx" \
       '$1=="W"&&$2==s&&$3==e&&$4==w{print $6;exit}' "$DATA_FILE" 2>/dev/null)
-    if [[ "$_icon" == "⚡" ]]; then
+    if [[ "$_icon" == "W" ]]; then
       SELECTED=$_i
       [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_widx}"
       jump_to "${_srv}|${_sess}|${_widx}"
@@ -588,11 +588,11 @@ render() {
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _k2=0
   for _wi2 in "${_W_icon[@]}"; do
     case "$_wi2" in
-      "⚡") (( _wc++ )); _HAS_WORKING=1 ;;
-      "⏸") (( _ic_raw++ )) ;;
-      "·")  (( _ec++ )) ;;
+      "W") (( _wc++ )); _HAS_WORKING=1 ;;
+      "I") (( _ic_raw++ )) ;;
+      "E") (( _ec++ )) ;;
     esac
-    if [[ "$_wi2" != "·" ]]; then
+    if [[ "$_wi2" != "E" ]]; then
       local _uk2="${_W_srv[$_k2]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_k2]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_k2]}"
       [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && (( _uc++ ))
     fi
@@ -745,10 +745,10 @@ render() {
     for _wi2 in "${_W_icon[@]}"; do
       local _fmatch=0
       case "$_FILTER_STATUS" in
-        working) [[ "$_wi2" == "⚡" ]] && _fmatch=1 ;;
+        working) [[ "$_wi2" == "W" ]] && _fmatch=1 ;;
         idle)
           local _fkey2="${_W_srv[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_fk]}"
-          [[ "$_wi2" != "·" && "$_wi2" != "⚡" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
+          [[ "$_wi2" != "E" && "$_wi2" != "W" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
         unread)
           local _fkey2="${_W_srv[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_fk]}"
           [[ -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
@@ -838,7 +838,7 @@ render() {
       local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
 
       # Buscar datos de la ventana
-      local _wname="" _wicon="·" _islast="1"; _k=0
+      local _wname="" _wicon="E" _islast="1"; _k=0
       for _ws in "${_W_srv[@]}"; do
         if [[ "$_ws" == "$_srv" && "${_W_sess[$_k]}" == "$_sess" && "${_W_widx[$_k]}" == "$_widx" ]]; then
           _wname="${_W_name[$_k]}"; _wicon="${_W_icon[$_k]}"; _islast="${_W_last[$_k]}"; break
@@ -851,8 +851,8 @@ render() {
         local _fwkey="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         local _fwmatch=0
         case "$_FILTER_STATUS" in
-          working) [[ "$_wicon" == "⚡" ]] && _fwmatch=1 ;;
-          idle)    [[ "$_wicon" != "·" && "$_wicon" != "⚡" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+          working) [[ "$_wicon" == "W" ]] && _fwmatch=1 ;;
+          idle)    [[ "$_wicon" != "E" && "$_wicon" != "W" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
           unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
         [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
@@ -865,8 +865,8 @@ render() {
       # Determinar estado base desde el icono del daemon
       local _state
       case "$_wicon" in
-        "·") _state="empty" ;;
-        "⚡") _state="working"; _HAS_WORKING=1 ;;
+        "E") _state="empty" ;;
+        "W") _state="working"; _HAS_WORKING=1 ;;
         *)   _state="idle" ;;
       esac
 
@@ -876,7 +876,7 @@ render() {
         rm -f "$_flag_f"; printf '💤' > "$_prev_f"
       else
         local _pi=""; [[ -f "$_prev_f" ]] && _pi=$(<"$_prev_f")
-        [[ "$_pi" == "⚡" && "$_state" == "idle" ]] && touch "$_flag_f"
+        [[ "$_pi" == "W" && "$_state" == "idle" ]] && touch "$_flag_f"
         [[ "$_state" == "working" ]] && rm -f "$_flag_f"
         printf '%s' "$_wicon" > "$_prev_f"
         [[ -f "$_flag_f" ]] && _state="unread"

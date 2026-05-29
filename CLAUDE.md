@@ -54,14 +54,20 @@ E|server_name|session_name|is_active(0/1)
 W|server_name|session_name|win_idx|win_name|icon|is_last(0/1)
 ```
 
-Icons used in `W` lines: `·` (empty/shell), `⚡` (working), `⏸` (idle/awaiting input).
+Icon codes in `W` lines: `E` (empty/shell), `W` (working), `I` (idle/awaiting input).
+These are internal codes — `sidebar.sh` maps them to display icons (`·`, Braille spinner, `○`).
 
 ## Icon detection
 
-`detect_icon` in `daemon.sh` identifies Claude Code state from a pane:
+`detect_icon` in `daemon.sh` identifies Claude Code state from a pane and returns `E`, `W`, or `I`:
 
-1. **Fast path (pane title)**: Claude Code sets its title to `✳` when idle and a Braille spinner (`U+2800–U+28FF`) when working. This is the reliable path.
-2. **Fallback (content scan)**: Looks for `⏺` (tool execution), `❯` (prompt), or `[Yes]/[No]/[Always]` (permission dialogs) in the last ~1500 chars of captured pane output.
+1. **Fast path (pane title)**: Claude Code sets its title to `✳` when idle and a Braille spinner
+   (`U+2800–U+28FF`) when working. This is the reliable path — no `capture-pane` needed.
+2. **Fallback (content scan)**: Looks for `⏺` (tool execution), `❯` (prompt), or
+   `[Yes]/[No]/[Always]` (permission dialogs) in the last ~1500 chars of captured pane output.
+
+`sidebar.sh` adds a fourth state, **unread** (`◉`), derived from a `.unread` flag file
+written when a window transitions `W → I` while the user is not looking at it.
 
 ## Bash compatibility
 

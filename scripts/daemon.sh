@@ -55,8 +55,8 @@ current_server_name() {
 }
 
 detect_icon() {
-  local _cmd="$1" _lines="$2" _title="${3:-}" _icon="·"
-  case "$_cmd" in zsh|bash|sh|fish|dash) printf '·'; return ;; esac
+  local _cmd="$1" _lines="$2" _title="${3:-}" _icon="E"
+  case "$_cmd" in zsh|bash|sh|fish|dash) printf 'E'; return ;; esac
 
   # Fast path: el pane title codifica el estado de Claude Code de forma fiable.
   # ✳ (U+2733) = idle esperando input.
@@ -64,17 +64,17 @@ detect_icon() {
   if [[ -n "$_title" ]]; then
     local _fc="${_title:0:1}"
     if [[ "$_fc" == "✳" ]]; then
-      printf '⏸'; return
+      printf 'I'; return
     fi
     local _hex
     _hex=$(LC_ALL=C printf '%s' "$_fc" | od -A n -t x1 | tr -d ' \n')
     case "$_hex" in
-      e2a0*|e2a1*|e2a2*|e2a3*) printf '⚡'; return ;;
+      e2a0*|e2a1*|e2a2*|e2a3*) printf 'W'; return ;;
     esac
   fi
 
   # Fallback: content scanning para casos sin título reconocido
-  [[ -z "$_lines" ]] && { printf '·'; return; }
+  [[ -z "$_lines" ]] && { printf 'E'; return; }
 
   local _wide="${_lines: -1500}"
   local _narrow="${_lines: -1000}"
@@ -82,19 +82,19 @@ detect_icon() {
 
   # ⏺ — Claude ejecutando herramienta
   _tmp="${_wide##*⏺}";            _tlen=${#_tmp}
-  [[ "$_wide" == *"⏺"*        && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="⚡"; }
+  [[ "$_wide" == *"⏺"*        && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="W"; }
 
   # ❯ — prompt de Claude esperando input
   _tmp="${_narrow##*❯}";          _tlen=${#_tmp}
-  [[ "$_narrow" == *"❯"*      && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="⏸"; }
+  [[ "$_narrow" == *"❯"*      && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
 
   # Permisos [Yes/No/Always] — Claude bloqueado esperando al usuario
   _tmp="${_narrow##*\[Yes\]}";    _tlen=${#_tmp}
-  [[ "$_narrow" == *"[Yes]"*  && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="⏸"; }
+  [[ "$_narrow" == *"[Yes]"*  && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
   _tmp="${_narrow##*\[No\]}";     _tlen=${#_tmp}
-  [[ "$_narrow" == *"[No]"*   && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="⏸"; }
+  [[ "$_narrow" == *"[No]"*   && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
   _tmp="${_narrow##*\[Always\]}"; _tlen=${#_tmp}
-  [[ "$_narrow" == *"[Always]"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="⏸"; }
+  [[ "$_narrow" == *"[Always]"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
 
   printf '%s' "$_icon"
 }
@@ -238,8 +238,8 @@ build_summary() {
   if [[ -f "$DATA_FILE" ]]; then
     while IFS='|' read -r _type _server _sess _widx _wname _icon _islast; do
       [[ "$_type" == "W" ]] || continue
-      [[ "$_icon" == "⚡" ]] && (( _working++ ))
-      [[ "$_icon" == "⏸" ]] && (( _idle++ ))
+      [[ "$_icon" == "W" ]] && (( _working++ ))
+      [[ "$_icon" == "I" ]] && (( _idle++ ))
     done < "$DATA_FILE"
   fi
 
@@ -303,7 +303,7 @@ while true; do
     build_summary
     LAST_BUILD=$SECONDS
     HAS_WORKING=false
-    grep -q '|⚡|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
+    grep -q '|W|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
     notify_clients
   fi
 
