@@ -1,0 +1,37 @@
+scripts/lib/cmd.sh
+  ai_agent 1-223
+scripts/sidebar.sh
+  ai_agent 1,4-10,13-14,55-62,76,84,112-115,119-123,131-132
+tests/helpers/common.bash
+  ai_agent 1-28
+scripts/lib/detect.sh
+  ai_agent 1-177
+scripts/lib/ops.sh
+  ai_agent 1-179
+.gitmodules
+  ai_agent 1-3
+tmux-agent-sidebar.tmux
+  ai_agent 4-10
+scripts/lib/render.sh
+  ai_agent 1-629
+scripts/lib/nav.sh
+  ai_agent 1-89
+scripts/lib/sidebar-utils.sh
+  ai_agent 1-84
+tests/nav.bats
+  ai_agent 1-90
+tests/cmd.bats
+  ai_agent 1-76
+scripts/daemon.sh
+  ai_agent 1,4-11,28-31
+tests/detect.bats
+  ai_agent 1-195
+tests/run_tests.sh
+  ai_agent 1-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "676572b5935e9de467fe9eb587e51db86763f269",
+  "prompts": {}
+}
