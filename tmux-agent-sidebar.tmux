@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Entry point del plugin tmux-agent-sidebar
 
+# Require bash 4+
+_bash_ver="${BASH_VERSINFO[0]:-0}"
+if (( _bash_ver < 4 )); then
+  tmux display-message "tmux-agent-sidebar requires bash 4+. Current: ${BASH_VERSION}. Install via Homebrew: brew install bash"
+  exit 1
+fi
+
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 DIRTY_FILE="$STATE_DIR/dirty"
