@@ -1233,6 +1233,7 @@ _ensure_sidebar() {
     [[ -n "$_live_w" && "$_live_w" != "$_sw" ]] && \
       "${OUTER_TMUX[@]}" resize-pane -t "$_live" -x "$_sw" 2>/dev/null
     "${OUTER_TMUX[@]}" select-pane -t "$_live" 2>/dev/null
+    _kill_extra_sidebars "$_dest" "$_live"
     return
   fi
 
@@ -1245,7 +1246,8 @@ _ensure_sidebar() {
   if [[ -n "$_dead" ]]; then
     "${OUTER_TMUX[@]}" respawn-pane -t "$_dead" -k \
       "exec $TMUXBIN -L $_server attach-session -t $_session" 2>/dev/null
-    "${OUTER_TMUX[@]}" select-pane -t "$_dead" 2>/dev/null
+    "${OUTER_TMUX[@]}" select-pane -t "$_dead" -T "Sessions" 2>/dev/null
+    _kill_extra_sidebars "$_dest" "$_dead"
   else
     local _lp; _lp=$("${OUTER_TMUX[@]}" list-panes -t "$_dest" \
       -F '#{pane_left}|#{pane_id}' 2>/dev/null \
@@ -1255,7 +1257,23 @@ _ensure_sidebar() {
       -P -F '#{pane_id}' \
       "exec $TMUXBIN -L $_server attach-session -t $_session" 2>/dev/null)
     [[ -n "$_np" ]] && "${OUTER_TMUX[@]}" select-pane -t "$_np" -T "Sessions" 2>/dev/null
+    _kill_extra_sidebars "$_dest" "$_np"
   fi
+}
+
+# Elimina panes "Sessions" duplicados (vivos Y muertos) en una ventana, preservando $_keep.
+# Actúa como self-healing: si la ventana quedó con dos sidebars por cualquier motivo,
+# la próxima navegación a ella limpia automáticamente los extras.
+_kill_extra_sidebars() {
+  local _dest="$1" _keep="$2"
+  [[ -z "$_keep" ]] && return
+  local _extras _dup
+  _extras=$("${OUTER_TMUX[@]}" list-panes -t "$_dest" \
+    -F '#{pane_id}|#{pane_title}' 2>/dev/null \
+    | awk -F'|' -v keep="$_keep" '$2=="Sessions" && $1!=keep {print $1}')
+  while IFS= read -r _dup; do
+    [[ -n "$_dup" ]] && "${OUTER_TMUX[@]}" kill-pane -t "$_dup" 2>/dev/null
+  done <<< "$_extras"
 }
 
 # ── Aplicar rename inline ─────────────────────────────────────────────────────

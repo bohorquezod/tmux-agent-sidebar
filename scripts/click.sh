@@ -121,11 +121,24 @@ fi
 # Asegurar sidebar server antes de crear/respawnear
 bash "$PLUGIN_DIR/scripts/server-start.sh"
 
+_dedup_sessions_panes() {
+  local _win="$1" _keep="$2"
+  [[ -z "$_keep" ]] && return
+  local _extras _dup
+  _extras=$($TMUXBIN list-panes -t "$_win" \
+    -F '#{pane_id}|#{pane_title}' 2>/dev/null \
+    | awk -F'|' -v keep="$_keep" '$2=="Sessions" && $1!=keep {print $1}')
+  while IFS= read -r _dup; do
+    [[ -n "$_dup" ]] && $TMUXBIN kill-pane -t "$_dup" 2>/dev/null
+  done <<< "$_extras"
+}
+
 if [[ -n "$DEAD_PANE" ]]; then
-  # Pane muerto: reconectar al sidebar server y darle foco
+  # Pane muerto: reconectar al sidebar server, restaurar título y limpiar duplicados
   $TMUXBIN respawn-pane -t "$DEAD_PANE" -k \
     "exec $TMUXBIN -L $SERVER attach-session -t $SESSION"
-  $TMUXBIN select-pane -t "$DEAD_PANE" 2>/dev/null
+  $TMUXBIN select-pane -t "$DEAD_PANE" -T "Sessions" 2>/dev/null
+  _dedup_sessions_panes "$DEST_SESS:$DEST_WIN" "$DEAD_PANE"
   exit 0
 fi
 
@@ -143,3 +156,4 @@ $TMUXBIN split-window -hb -l "$SIDEBAR_W" -t "$_target" \
 # split-window deja el foco en el nuevo pane — asignar título y mantener foco
 NEW_PANE_ID=$($TMUXBIN display-message -p '#{pane_id}' 2>/dev/null)
 [[ -n "$NEW_PANE_ID" ]] && $TMUXBIN select-pane -t "$NEW_PANE_ID" -T "Sessions" 2>/dev/null
+_dedup_sessions_panes "$DEST_SESS:$DEST_WIN" "$NEW_PANE_ID"

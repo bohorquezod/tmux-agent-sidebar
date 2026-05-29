@@ -49,7 +49,7 @@ if [[ -n "$DEAD_PANE" ]]; then
   # Pane muerto: reutilizar reconectando al sidebar server y darle foco
   $TMUXBIN respawn-pane -t "$DEAD_PANE" -k \
     "exec $TMUXBIN -L $SERVER attach-session -t $SESSION"
-  $TMUXBIN select-pane -t "$DEAD_PANE" 2>/dev/null
+  $TMUXBIN select-pane -t "$DEAD_PANE" -T "Sessions" 2>/dev/null
   exit 0
 fi
 
