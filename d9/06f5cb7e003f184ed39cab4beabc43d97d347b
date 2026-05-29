@@ -1,0 +1,31 @@
+scripts/daemon.sh
+  s_f7e552934e65bd::t_b7b60809612fd9 306
+  s_f7e552934e65bd::t_fc678f156d02e0 58-59,67,72,77,85,89,93,95,97
+  s_f7e552934e65bd::t_077373e707f6d8 241-242
+CLAUDE.md
+  s_f7e552934e65bd::t_aeb6978d7ebf1e 57-58,62,64-70
+scripts/sidebar.sh
+  s_f7e552934e65bd::t_3bbfeb2c88c0cb 868-869
+  s_f7e552934e65bd::t_382ad97449d6cb 171
+  s_f7e552934e65bd::t_4d9704aed93b8d 841
+  s_f7e552934e65bd::t_e2cba402684d01 854-855
+  s_f7e552934e65bd::t_88223826f5eaae 879
+  s_f7e552934e65bd::t_2757f52f3a3a6c 748,751
+  s_f7e552934e65bd::t_fae5b295d6eeea 591-593,595
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d906f5cb7e003f184ed39cab4beabc43d97d347b",
+  "prompts": {},
+  "sessions": {
+    "s_f7e552934e65bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47c89bf4-2c52-4187-a87b-cab1e2bcc39c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
