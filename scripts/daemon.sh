@@ -14,12 +14,11 @@ PID_FILE="${STATE_DIR}/daemon.pid"
 CLIENTS_DIR="${STATE_DIR}/clients"
 CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
+CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
-# El PID se guarda DENTRO del lock dir para eliminar la ventana de race entre
-# mkdir y la escritura del PID_FILE separado. Quien lee el lock siempre tiene el PID.
 LOCK_DIR="${STATE_DIR}/daemon.lock"
 _LOCK_PID_FILE="${LOCK_DIR}/pid"
 
@@ -29,13 +28,11 @@ _try_acquire_lock() {
     printf '%d' "$$" > "$PID_FILE"
     return 0
   fi
-  # Lock existe — leer PID desde dentro del lock dir
   local _epid; _epid=$(cat "$_LOCK_PID_FILE" 2>/dev/null)
   [[ -z "$_epid" ]] && _epid=$(cat "$PID_FILE" 2>/dev/null)
   if [[ -n "$_epid" ]] && kill -0 "$_epid" 2>/dev/null; then
-    return 1  # Daemon activo, no tomar control
+    return 1
   fi
-  # Proceso muerto: limpiar y reintentar
   rm -rf "$LOCK_DIR"
   mkdir "$LOCK_DIR" 2>/dev/null || return 1
   printf '%d' "$$" > "$_LOCK_PID_FILE"
@@ -54,16 +51,58 @@ current_server_name() {
   local _s="${TMUX%%,*}"; printf '%s' "${_s##*/}"
 }
 
+# Devuelve el código de icono para un pane.
+# Argumentos: ppid(pane_pid) cmd lines title pdead(pane_dead)
+# Códigos de retorno: E W I P L X
 detect_icon() {
-  local _cmd="$1" _lines="$2" _title="${3:-}" _icon="E"
+  local _ppid="$1" _cmd="$2" _lines="$3" _title="${4:-}" _pdead="${5:-0}"
+
+  # Pane muerto — sin icono activo; puede ser X si tenía sesión busy
+  if [[ "$_pdead" == "1" ]]; then
+    local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
+    if [[ -f "$_sf" ]]; then
+      local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
+      [[ "$_st" == "busy" ]] && { printf 'X'; return; }
+    fi
+    printf 'E'; return
+  fi
+
+  # Shell conocido → vacío
   case "$_cmd" in zsh|bash|sh|fish|dash) printf 'E'; return ;; esac
 
-  # Fast path: el pane title codifica el estado de Claude Code de forma fiable.
-  # ✳ (U+2733) = idle esperando input.
-  # Braille block (U+2800-U+28FF, UTF-8: E2 A0-A3 xx) = spinner = working.
+  # Fuente primaria: session file de Claude (~/.claude/sessions/{ppid}.json)
+  local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
+  if [[ -f "$_sf" ]]; then
+    if ! kill -0 "$_ppid" 2>/dev/null; then
+      # Proceso muerto con session file — crashed si estaba busy
+      local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
+      [[ "$_st" == "busy" ]] && { printf 'X'; return; }
+      printf 'E'; return
+    fi
+    local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
+    case "$_st" in
+      busy) printf 'W'; return ;;
+      idle)
+        # Distinguir idle limpio de blocked (diálogo de permiso)
+        if [[ -n "$_lines" ]] && \
+           ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
+             [[ "$_lines" == *"[Always]"* ]] ); then
+          printf 'P'; return
+        fi
+        printf 'I'; return ;;
+    esac
+  fi
+
+  # Fallback nivel 1: pane title (Claude Code lo escribe vía OSC 2)
   if [[ -n "$_title" ]]; then
     local _fc="${_title:0:1}"
     if [[ "$_fc" == "✳" ]]; then
+      # Idle según título — revisar si hay diálogo de permiso en contenido
+      if [[ -n "$_lines" ]] && \
+         ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
+           [[ "$_lines" == *"[Always]"* ]] ); then
+        printf 'P'; return
+      fi
       printf 'I'; return
     fi
     local _hex
@@ -73,37 +112,97 @@ detect_icon() {
     esac
   fi
 
-  # Fallback: content scanning para casos sin título reconocido
+  # Fallback nivel 2: content scanning (versiones viejas / sin session file)
   [[ -z "$_lines" ]] && { printf 'E'; return; }
 
   local _wide="${_lines: -1500}"
   local _narrow="${_lines: -1000}"
-  local _min=999999 _tmp _tlen
+  local _icon="E" _min=999999 _tmp _tlen
 
-  # ⏺ — Claude ejecutando herramienta
   _tmp="${_wide##*⏺}";            _tlen=${#_tmp}
   [[ "$_wide" == *"⏺"*        && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="W"; }
 
-  # ❯ — prompt de Claude esperando input
   _tmp="${_narrow##*❯}";          _tlen=${#_tmp}
   [[ "$_narrow" == *"❯"*      && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
 
-  # Permisos [Yes/No/Always] — Claude bloqueado esperando al usuario
+  # Permission patterns → P (más urgente que idle simple)
   _tmp="${_narrow##*\[Yes\]}";    _tlen=${#_tmp}
-  [[ "$_narrow" == *"[Yes]"*  && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
+  [[ "$_narrow" == *"[Yes]"*  && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
   _tmp="${_narrow##*\[No\]}";     _tlen=${#_tmp}
-  [[ "$_narrow" == *"[No]"*   && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
+  [[ "$_narrow" == *"[No]"*   && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
   _tmp="${_narrow##*\[Always\]}"; _tlen=${#_tmp}
-  [[ "$_narrow" == *"[Always]"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
+  [[ "$_narrow" == *"[Always]"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
 
   printf '%s' "$_icon"
+}
+
+# Devuelve las siglas del sub-agente leyendo el campo "agent" del session file.
+agent_sigla() {
+  local _ppid="$1"
+  local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
+  [[ -f "$_sf" ]] || return
+  local _agent
+  _agent=$(grep -o '"agent":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
+  [[ -z "$_agent" ]] && return
+  case "$_agent" in
+    pl|tl)     printf '%s' "${_agent^^}" ;;
+    developer) printf 'DV' ;;
+    reviewer)  printf 'RV' ;;
+    runner)    printf 'RN' ;;
+    *)         printf '%s' "${_agent:0:2}" | tr '[:lower:]' '[:upper:]' ;;
+  esac
+}
+
+# Detecta si una ventana está en loop (≥3 transiciones W→I en 10 min).
+# Actualiza los archivos de tracking. Retorna 0 si se debe aplicar estado L.
+check_loop() {
+  local _wkey="$1" _icon="$2"
+  local _prev_f="${STATE_DIR}/${_wkey}.dprev"
+  local _loop_f="${STATE_DIR}/${_wkey}.looptimes"
+  local _prev; _prev=$(<"$_prev_f" 2>/dev/null)
+
+  # Si el usuario visitó la ventana (sidebar borra .unread), resetear loop counter
+  [[ ! -f "${STATE_DIR}/${_wkey}.unread" && -f "$_loop_f" ]] && {
+    # Solo resetear si el estado actual es idle (agente terminó y el usuario lo revisó)
+    [[ "$_icon" == "I" && "$_prev" == "L" ]] && { rm -f "$_loop_f"; printf '%s' "$_icon" > "$_prev_f"; return 1; }
+  }
+
+  # Registrar transición W→I
+  if [[ ( "$_prev" == "W" || "$_prev" == "L" ) && ( "$_icon" == "I" || "$_icon" == "P" ) ]]; then
+    local _now; _now=$(date +%s)
+    printf '%s\n' "$_now" >> "$_loop_f"
+    # Podar entradas antiguas (>600s)
+    local _cutoff=$(( _now - 600 )) _trimmed="" _ts
+    while IFS= read -r _ts; do
+      [[ -n "$_ts" && "$_ts" -gt "$_cutoff" ]] && _trimmed+="${_ts}"$'\n'
+    done < "$_loop_f"
+    printf '%s' "$_trimmed" > "$_loop_f"
+  fi
+
+  # Actualizar estado previo del daemon
+  local _save_icon="$_icon"
+
+  # Verificar umbral de loop
+  local _loop_count=0
+  if [[ -f "$_loop_f" ]]; then
+    _loop_count=$(grep -c '[0-9]' "$_loop_f" 2>/dev/null || echo 0)
+  fi
+
+  if [[ "${_loop_count:-0}" -ge 3 && ( "$_icon" == "I" || "$_icon" == "P" || "$_icon" == "L" ) ]]; then
+    _save_icon="L"
+    printf '%s' "L" > "$_prev_f"
+    return 0
+  fi
+
+  printf '%s' "$_save_icon" > "$_prev_f"
+  return 1
 }
 
 # ── Build data file ───────────────────────────────────────────────────────────
 # Formato de línea (separador |):
 #   S|server|is_current(0/1)
 #   E|server|session|is_active(0/1)
-#   W|server|session|win_idx|win_name|icon|is_last(0/1)
+#   W|server|session|win_idx|win_name|icon|agent_sigla|is_last(0/1)
 
 build_data() {
   local _current _socket_dir _buf _tmpdir _servers
@@ -113,7 +212,6 @@ build_data() {
   _tmpdir=$(mktemp -d)
   _servers=("$_current")
 
-  # Descubrir otros servidores activos
   if [[ -d "$_socket_dir" ]]; then
     for _sock in "$_socket_dir"/*; do
       [[ -S "$_sock" ]] || continue
@@ -132,21 +230,32 @@ build_data() {
 
     local _SESS _WINS _PANES
     _SESS=$($TMUXBIN "${_sargs[@]}" list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null) || continue
-    _WINS=$($TMUXBIN "${_sargs[@]}" list-windows  -a -F '#{session_name}|#{window_index}|#{window_name}' 2>/dev/null)
+    _WINS=$($TMUXBIN "${_sargs[@]}" list-windows -a -F '#{session_name}|#{window_index}|#{window_name}' 2>/dev/null)
+    # Formato: pane_id|pane_pid|pane_dead|session|window|cmd|title
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
-      -F '#{pane_id}|#{session_name}|#{window_index}|#{pane_current_command}|#{pane_title}' 2>/dev/null)
+      -F '#{pane_id}|#{pane_pid}|#{pane_dead}|#{session_name}|#{window_index}|#{pane_current_command}|#{pane_title}' 2>/dev/null)
 
-    # Capturas en paralelo — omite panes cuyo título ya codifica estado Claude o cuyo comando es shell conocido
-    while IFS='|' read -r _pid _s _w _c _pt; do
+    # Capturas en paralelo — omite panes que no necesitan content scan
+    while IFS='|' read -r _paneid _ppid _pdead _s _w _c _pt; do
+      # Pane muerto: no capturar, se maneja por estado
+      [[ "$_pdead" == "1" ]] && continue
+      # Shell conocido: no necesita contenido
       case "$_c" in zsh|bash|sh|fish|dash) continue ;; esac
+      # Session file dice busy → es W seguro, skip captura
+      local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
+      if [[ -f "$_sf" ]] && kill -0 "$_ppid" 2>/dev/null; then
+        local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
+        [[ "$_st" == "busy" ]] && continue
+      fi
+      # Braille en título → W seguro (fast path para versiones sin session file)
       if [[ -n "$_pt" ]]; then
-        _fc="${_pt:0:1}"
-        if [[ "$_fc" == "✳" ]]; then continue; fi
-        _hex=$(LC_ALL=C printf '%s' "$_fc" | od -A n -t x1 | tr -d ' \n')
+        local _fc="${_pt:0:1}"
+        local _hex; _hex=$(LC_ALL=C printf '%s' "$_fc" | od -A n -t x1 | tr -d ' \n')
         case "$_hex" in e2a0*|e2a1*|e2a2*|e2a3*) continue ;; esac
       fi
-      $TMUXBIN "${_sargs[@]}" capture-pane -t "$_pid" -p \
-        > "$_tmpdir/${_server}_${_pid//[^a-zA-Z0-9]/_}" 2>/dev/null &
+      # Capturar contenido para detección de P y fallback
+      $TMUXBIN "${_sargs[@]}" capture-pane -t "$_paneid" -p \
+        > "$_tmpdir/${_server}_${_paneid//[^a-zA-Z0-9]/_}" 2>/dev/null &
     done <<< "$_PANES"
     wait
 
@@ -177,7 +286,6 @@ build_data() {
     for _sess_entry in "${_sess_sorted[@]}"; do
       local _sess="${_sess_entry%%|*}" _attached="${_sess_entry#*|}"
 
-      # Saltar sesiones en la lista de hidden_sessions (separadas por espacios)
       if [[ -n "$_hidden_raw" ]]; then
         local _skip=false _hs
         for _hs in $_hidden_raw; do
@@ -188,7 +296,6 @@ build_data() {
 
       local _is_active=0; [[ "${_attached:-0}" -gt 0 ]] && _is_active=1
 
-      # Recopilar ventanas del session para saber cuál es la última
       local _wins=()
       while IFS='|' read -r _ws _wi _wn; do
         [[ "$_ws" == "$_sess" ]] && _wins+=("${_wi}|${_wn}")
@@ -200,11 +307,13 @@ build_data() {
       local _wj=0
       for _wentry in "${_wins[@]}"; do
         local _widx="${_wentry%%|*}" _wname="${_wentry#*|}"
-        local _capid="" _capcmd="" _captitle=""
-        while IFS='|' read -r _pid _ps _pw _pc _pt; do
+        local _capid="" _cappid="" _capdead="0" _capcmd="" _captitle=""
+        # Tomar el primer pane no-sidebar de la ventana
+        while IFS='|' read -r _paneid _ppid _pdead _ps _pw _pc _pt; do
           [[ "$_ps" == "$_sess" && "$_pw" == "$_widx" ]] || continue
-          [[ "$_pt" == "Sessions" ]] && continue  # saltar el pane del sidebar
-          _capid="$_pid"; _capcmd="$_pc"; _captitle="$_pt"; break
+          [[ "$_pt" == "Sessions" ]] && continue
+          _capid="$_paneid"; _cappid="$_ppid"; _capdead="$_pdead"
+          _capcmd="$_pc"; _captitle="$_pt"; break
         done <<< "$_PANES"
 
         local _lines="" _ck="${_capid//[^a-zA-Z0-9]/_}"
@@ -213,12 +322,20 @@ build_data() {
         local _cap_key="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         printf '%s' "$_lines" > "${CAPTURES_DIR}/${_cap_key}"
 
-        local _icon; _icon=$(detect_icon "$_capcmd" "$_lines" "$_captitle")
+        local _icon; _icon=$(detect_icon "$_cappid" "$_capcmd" "$_lines" "$_captitle" "$_capdead")
+
+        # Loop detection
+        local _wkey="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+        check_loop "$_wkey" "$_icon" && _icon="L"
+
+        # Agent sigla
+        local _sigla=""; _sigla=$(agent_sigla "$_cappid")
+
         local _islast=0; (( _wj + 1 >= _wtotal )) && _islast=1
-        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_islast}"$'\n'
+        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}"$'\n'
         (( _wj++ ))
       done
-    done  # _sess_sorted
+    done
   done
 
   rm -rf "$_tmpdir"
@@ -227,19 +344,21 @@ build_data() {
 }
 
 # ── Build summary token ───────────────────────────────────────────────────────
-# Escribe ${STATE_DIR}/summary con conteos compactos de estado de agentes.
-# También actualiza la user-option @agent_sidebar_summary en el servidor actual
-# para que el usuario pueda referenciarla con #{@agent_sidebar_summary}.
 
 build_summary() {
-  local _working=0 _idle=0 _unread=0
-  local _type _server _sess _widx _wname _icon _islast _f
+  local _working=0 _idle=0 _blocked=0 _loop=0 _crashed=0 _unread=0
+  local _type _server _sess _widx _wname _icon _sigla _islast _f
 
   if [[ -f "$DATA_FILE" ]]; then
-    while IFS='|' read -r _type _server _sess _widx _wname _icon _islast; do
+    while IFS='|' read -r _type _server _sess _widx _wname _icon _sigla _islast; do
       [[ "$_type" == "W" ]] || continue
-      [[ "$_icon" == "W" ]] && (( _working++ ))
-      [[ "$_icon" == "I" ]] && (( _idle++ ))
+      case "$_icon" in
+        W) (( _working++ ))  ;;
+        I) (( _idle++ ))     ;;
+        P) (( _blocked++ ))  ;;
+        L) (( _loop++ ))     ;;
+        X) (( _crashed++ ))  ;;
+      esac
     done < "$DATA_FILE"
   fi
 
@@ -249,6 +368,9 @@ build_summary() {
 
   local _token=""
   [[ $_working -gt 0 ]] && _token+="⚡${_working} "
+  [[ $_blocked -gt 0 ]] && _token+="?${_blocked} "
+  [[ $_loop    -gt 0 ]] && _token+="↺${_loop} "
+  [[ $_crashed -gt 0 ]] && _token+="✗${_crashed} "
   [[ $_idle    -gt 0 ]] && _token+="⏸${_idle} "
   [[ $_unread  -gt 0 ]] && _token+="◉${_unread} "
   _token="${_token% }"
@@ -280,7 +402,7 @@ notify_clients() {
   done
 }
 
-LAST_BUILD=-999  # fuerza el primer build inmediatamente
+LAST_BUILD=-999
 HAS_WORKING=false
 
 while true; do
@@ -303,7 +425,7 @@ while true; do
     build_summary
     LAST_BUILD=$SECONDS
     HAS_WORKING=false
-    grep -q '|W|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
+    grep -qE '\|(W|L)\|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
     notify_clients
   fi
 

@@ -124,7 +124,7 @@ _HELP_MODE=0
 # Data arrays — global cache repopulado solo cuando DATA_FILE cambia
 _S_srv=() _S_cur=()
 _E_srv=() _E_sess=() _E_act=()
-_W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_last=()
+_W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_agent=() _W_last=()
 _RENDER_DATA_MTIME=""
 
 # ── Estado de navegación ──────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ jump_next_working() {
     _sess="${_wrest%%|*}"; _widx="${_wrest#*|}"
     _icon=$(awk -F'|' -v s="$_srv" -v e="$_sess" -v w="$_widx" \
       '$1=="W"&&$2==s&&$3==e&&$4==w{print $6;exit}' "$DATA_FILE" 2>/dev/null)
-    if [[ "$_icon" == "W" ]]; then
+    if [[ "$_icon" == "W" || "$_icon" == "L" ]]; then
       SELECTED=$_i
       [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_widx}"
       jump_to "${_srv}|${_sess}|${_widx}"
@@ -484,13 +484,13 @@ render() {
   # ── Pre-leer DATA_FILE en arrays paralelos ────────────────────────────────
   _S_srv=() _S_cur=()
   _E_srv=() _E_sess=() _E_act=()
-  _W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_last=()
-  while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6; do
+  _W_srv=() _W_sess=() _W_widx=() _W_name=() _W_icon=() _W_agent=() _W_last=()
+  while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6 _f7; do
     case "$_t" in
       S) _S_srv+=("$_f1"); _S_cur+=("$_f2") ;;
       E) _E_srv+=("$_f1"); _E_sess+=("$_f2"); _E_act+=("$_f3") ;;
       W) _W_srv+=("$_f1"); _W_sess+=("$_f2"); _W_widx+=("$_f3")
-         _W_name+=("$_f4"); _W_icon+=("$_f5"); _W_last+=("$_f6") ;;
+         _W_name+=("$_f4"); _W_icon+=("$_f5"); _W_agent+=("$_f6"); _W_last+=("$_f7") ;;
     esac
   done < "$DATA_FILE"
   _RENDER_DATA_MTIME="$_df_mtime"
@@ -585,12 +585,15 @@ render() {
   local _cur_sess="${_outer_sess:-}"
 
   # ── Precalcular conteos para el footer de estado ─────────────────────────
-  local _wc=0 _uc=0 _ic_raw=0 _ec=0 _k2=0
+  local _wc=0 _uc=0 _ic_raw=0 _ec=0 _pc=0 _lc=0 _xc=0 _k2=0
   for _wi2 in "${_W_icon[@]}"; do
     case "$_wi2" in
       "W") (( _wc++ )); _HAS_WORKING=1 ;;
       "I") (( _ic_raw++ )) ;;
       "E") (( _ec++ )) ;;
+      "P") (( _pc++ )) ;;
+      "L") (( _lc++ )); _HAS_WORKING=1 ;;
+      "X") (( _xc++ )) ;;
     esac
     if [[ "$_wi2" != "E" ]]; then
       local _uk2="${_W_srv[$_k2]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_k2]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_k2]}"
@@ -668,7 +671,7 @@ render() {
 
     buf+=$'\n'; mapbuf+=$'\n'
     buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
-    buf+=" ${CY}⠿${R} ${_wc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
+    buf+=" ${CY}⠿${R} ${_wc}  ${RD}?${R} ${_pc}  ${YL}↺${R} ${_lc}  ${RD}✗${R} ${_xc}  ${GR}○${R} $(( _ic_raw - _uc ))  ${YL}◉${R} ${_uc}  ${GR}·${R} ${_ec}"$'\n'
     buf+="${GR} [jk]nav [↵]go [Esc]cancel${R}"$'\n'
     mapbuf+=$'\n\n'
 
@@ -745,10 +748,10 @@ render() {
     for _wi2 in "${_W_icon[@]}"; do
       local _fmatch=0
       case "$_FILTER_STATUS" in
-        working) [[ "$_wi2" == "W" ]] && _fmatch=1 ;;
+        working) [[ "$_wi2" == "W" || "$_wi2" == "L" ]] && _fmatch=1 ;;
         idle)
           local _fkey2="${_W_srv[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_fk]}"
-          [[ "$_wi2" != "E" && "$_wi2" != "W" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
+          [[ "$_wi2" != "E" && "$_wi2" != "W" && "$_wi2" != "L" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
         unread)
           local _fkey2="${_W_srv[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_sess[$_fk]//[^a-zA-Z0-9_-]/_}_${_W_widx[$_fk]}"
           [[ -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
@@ -838,10 +841,11 @@ render() {
       local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
 
       # Buscar datos de la ventana
-      local _wname="" _wicon="E" _islast="1"; _k=0
+      local _wname="" _wicon="E" _wagent="" _islast="1"; _k=0
       for _ws in "${_W_srv[@]}"; do
         if [[ "$_ws" == "$_srv" && "${_W_sess[$_k]}" == "$_sess" && "${_W_widx[$_k]}" == "$_widx" ]]; then
-          _wname="${_W_name[$_k]}"; _wicon="${_W_icon[$_k]}"; _islast="${_W_last[$_k]}"; break
+          _wname="${_W_name[$_k]}"; _wicon="${_W_icon[$_k]}"
+          _wagent="${_W_agent[$_k]:-}"; _islast="${_W_last[$_k]}"; break
         fi
         (( _k++ ))
       done
@@ -851,8 +855,8 @@ render() {
         local _fwkey="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         local _fwmatch=0
         case "$_FILTER_STATUS" in
-          working) [[ "$_wicon" == "W" ]] && _fwmatch=1 ;;
-          idle)    [[ "$_wicon" != "E" && "$_wicon" != "W" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+          working) [[ "$_wicon" == "W" || "$_wicon" == "L" ]] && _fwmatch=1 ;;
+          idle)    [[ "$_wicon" != "E" && "$_wicon" != "W" && "$_wicon" != "L" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
           unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
         [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
@@ -867,6 +871,9 @@ render() {
       case "$_wicon" in
         "E") _state="empty" ;;
         "W") _state="working"; _HAS_WORKING=1 ;;
+        "P") _state="blocked" ;;
+        "L") _state="loop";    _HAS_WORKING=1 ;;
+        "X") _state="crashed" ;;
         *)   _state="idle" ;;
       esac
 
@@ -876,20 +883,38 @@ render() {
         rm -f "$_flag_f"; printf '💤' > "$_prev_f"
       else
         local _pi=""; [[ -f "$_prev_f" ]] && _pi=$(<"$_prev_f")
-        [[ "$_pi" == "W" && "$_state" == "idle" ]] && touch "$_flag_f"
+        # Unread: W→idle-like (incluye blocked, loop, idle)
+        [[ "$_pi" == "W" && ( "$_state" == "idle" || "$_state" == "blocked" || "$_state" == "loop" ) ]] && touch "$_flag_f"
         [[ "$_state" == "working" ]] && rm -f "$_flag_f"
         printf '%s' "$_wicon" > "$_prev_f"
-        [[ -f "$_flag_f" ]] && _state="unread"
+        [[ -f "$_flag_f" && "$_state" != "working" ]] && _state="unread"
       fi
 
       # Seleccionar icono y colores según estado
       local _display_icon _icon_col _name_col
-      case "$_state" in
-        empty)   _display_icon="·";                          _icon_col="$GR"; _name_col="$GR" ;;
-        idle)    _display_icon="○";                          _icon_col="$GR"; _name_col="$GR" ;;
-        working) _display_icon="${_SPINNER[$_SPIN_FRAME]}";  _icon_col="$CY"; _name_col="$CY" ;;
-        unread)  _display_icon="◉";                          _icon_col="$YL"; _name_col="$YL" ;;
-      esac
+      if [[ -n "$_wagent" ]]; then
+        # Sub-agente con nombre: sigla como icono, color según estado
+        _display_icon="$_wagent"
+        case "$_state" in
+          empty)   _icon_col="$GR"; _name_col="$GR" ;;
+          working) _icon_col="$CY"; _name_col="$CY" ;;
+          idle)    _icon_col="$GR"; _name_col="$GR" ;;
+          blocked) _icon_col="$RD"; _name_col="$RD" ;;
+          loop)    _icon_col="$YL"; _name_col="$YL" ;;
+          crashed) _icon_col="$RD"; _name_col="$GR" ;;
+          unread)  _icon_col="$YL"; _name_col="$YL" ;;
+        esac
+      else
+        case "$_state" in
+          empty)   _display_icon="·";                          _icon_col="$GR"; _name_col="$GR" ;;
+          idle)    _display_icon="○";                          _icon_col="$GR"; _name_col="$GR" ;;
+          working) _display_icon="${_SPINNER[$_SPIN_FRAME]}";  _icon_col="$CY"; _name_col="$CY" ;;
+          blocked) _display_icon="?";                          _icon_col="$RD"; _name_col="$RD" ;;
+          loop)    _display_icon="↺";                          _icon_col="$YL"; _name_col="$YL" ;;
+          crashed) _display_icon="✗";                          _icon_col="$RD"; _name_col="$GR" ;;
+          unread)  _display_icon="◉";                          _icon_col="$YL"; _name_col="$YL" ;;
+        esac
+      fi
 
       local _br='└─'; [[ "$_islast" != "1" ]] && _br='├─'
       local _wpfx
