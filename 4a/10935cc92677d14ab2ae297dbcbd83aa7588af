@@ -1,0 +1,26 @@
+scripts/sidebar.sh
+  s_f7e552934e65bd::t_a12b23f0299570 1264-1266,1272-1273
+  s_f7e552934e65bd::t_5cef9b08b8798c 1236,1249,1260,1267-1271,1274-1276
+  s_f7e552934e65bd::t_f722654f0b0d49 1250
+scripts/toggle.sh
+  s_f7e552934e65bd::t_899ddbc3756abf 52
+scripts/click.sh
+  s_f7e552934e65bd::t_c9c997c3808325 124-135,137,141,159
+  s_f7e552934e65bd::t_5005f442896726 140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4a10935cc92677d14ab2ae297dbcbd83aa7588af",
+  "prompts": {},
+  "sessions": {
+    "s_f7e552934e65bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47c89bf4-2c52-4187-a87b-cab1e2bcc39c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
