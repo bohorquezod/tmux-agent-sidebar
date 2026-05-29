@@ -1,0 +1,40 @@
+VERSION
+  s_bb4fc6746a8009::t_bb51dac75f1a47 1
+scripts/daemon.sh
+  s_f7e552934e65bd::t_61f5b569a8ba66 428
+  s_f7e552934e65bd::t_65d74bcbfc8c57 17,34,54-56,58-70,73-96,100-105,115,120,128,130,132,134,139-200,205,233-234,236,238-242,244-250,252-253,256-258,310-312,314-316,325-333,335,338,349-350,353,355-361,371-373,405
+scripts/sidebar.sh
+  s_f7e552934e65bd::t_a5d9afee4f5976 874-876,886-887,890,895-917
+  s_f7e552934e65bd::t_21683cb551dcfd 751,754
+  s_f7e552934e65bd::t_21f388024fb420 844,847-848
+  s_f7e552934e65bd::t_49bcbc6806df10 674
+  s_f7e552934e65bd::t_122bd781d5ab29 127,487
+  s_f7e552934e65bd::t_b17596bcf41592 588,594-596
+  s_f7e552934e65bd::t_d71f413c32dd08 858-859
+  s_f7e552934e65bd::t_ac2f736f3deab0 488,493
+  s_f7e552934e65bd::t_a9ba3a37c97181 171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7c57420216437a1ce54491877c2cfe184ce6b616",
+  "prompts": {},
+  "sessions": {
+    "s_bb4fc6746a8009": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4c89cc87-eb85-47c5-b32e-2161607c559b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_f7e552934e65bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47c89bf4-2c52-4187-a87b-cab1e2bcc39c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
