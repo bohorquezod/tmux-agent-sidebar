@@ -901,9 +901,9 @@ render() {
         crashed) _display_icon="✗";                          _icon_col="$RD"; _name_col="$GR" ;;
         unread)  _display_icon="◉";                          _icon_col="$YL"; _name_col="$YL" ;;
       esac
-      # Badge de agente entre el icono y el nombre: "{estado} {SIGLA} nombre"
+      # Badge de agente: "{estado} [SIGLA] nombre" — color fijo PU independiente del estado
       local _agent_badge=""
-      [[ -n "$_wagent" ]] && _agent_badge="${_wagent} "
+      [[ -n "$_wagent" ]] && _agent_badge="[${_wagent}] "
 
       local _br='└─'; [[ "$_islast" != "1" ]] && _br='├─'
       local _wpfx
@@ -919,7 +919,7 @@ render() {
         _wpfx="  "; [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && _wpfx=" ${YL}▸${R}"
       fi
 
-      # Truncar nombre con … si excede el ancho (descontar badge de agente si existe)
+      # Truncar nombre descontando el badge "[XX] " si existe (${#_agent_badge} chars)
       local _maxn=$(( max - 3 - ${#_agent_badge} )) _wdisp
       [[ $_maxn -lt 4 ]] && _maxn=4
       if [[ ${#_wname} -gt $_maxn ]]; then
@@ -928,14 +928,15 @@ render() {
         _wdisp="${_wname:0:$_maxn}"
       fi
 
+      local _badge_col="${PU}"  # color fijo para el badge de agente, siempre purple
       if [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]]; then
         buf+="${_wpfx}${RD}${_br}${R} ${RD}✕${R} ${RD}${_agent_badge}${_wdisp}${R}"$'\n'
       elif [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
         local _active_icon_col="$G"
         [[ "$_state" == "working" ]] && _active_icon_col="$CY"
-        buf+="${_wpfx}${G}${_br}${R} ${_active_icon_col}${_display_icon}${R} ${_icon_col}${_agent_badge}${R}${G}${_wdisp}${R}"$'\n'
+        buf+="${_wpfx}${G}${_br}${R} ${_active_icon_col}${_display_icon}${R} ${_badge_col}${_agent_badge}${R}${G}${_wdisp}${R}"$'\n'
       else
-        buf+="${_wpfx}${GR}${_br}${R} ${_icon_col}${_display_icon}${R} ${_icon_col}${_agent_badge}${R}${_name_col}${_wdisp}${R}"$'\n'
+        buf+="${_wpfx}${GR}${_br}${R} ${_icon_col}${_display_icon}${R} ${_badge_col}${_agent_badge}${R}${_name_col}${_wdisp}${R}"$'\n'
       fi
       mapbuf+="${_srv}|${_sess}|${_widx}"$'\n'
     fi
