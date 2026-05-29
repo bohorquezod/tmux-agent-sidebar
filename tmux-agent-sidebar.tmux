@@ -33,6 +33,8 @@ if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "2" ]; then
   tmux set-hook -ga client-session-changed "run-shell '$PLUGIN_DIR/scripts/track-session.sh'"
   # Cuando el pane sidebar es resizeado, actualizar el sidebar server con el nuevo ancho.
   # Necesario porque window-size manual impide que los clientes cambien el tamaño solos.
+  # Resize del pane sidebar → actualizar sidebar server con el nuevo ancho.
+  # sidebar.sh detecta el cambio vía stty size al inicio de cada iteración del loop.
   tmux set-hook -ga after-resize-pane "if -F '#{==:#{pane_title},Sessions}' 'run-shell \"tmux -L tmux-agent-sidebar resize-window -t sidebar -x #{pane_width} 2>/dev/null\"'"
   # Limpiar sidebar server cuando el último outer session cierre
   tmux set-hook -ga session-closed \

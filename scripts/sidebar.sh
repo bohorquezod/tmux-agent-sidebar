@@ -1348,7 +1348,7 @@ handle_key() {
       ESC)             _RENAME_ITEM=""; _RENAME_BUF=""; _RENAME_TYPE="" ;;
       UP|DOWN|LEFT|RIGHT) ;;
       $'\x7f'|$'\x08') _RENAME_BUF="${_RENAME_BUF%?}" ;;
-      *) _RENAME_BUF+="$key" ;;
+      *) [[ "$key" > $'\x1f' && "$key" != $'\x7f' ]] && _RENAME_BUF+="$key" ;;
     esac
     return
   fi
@@ -1360,7 +1360,7 @@ handle_key() {
       ""|$'\n'|$'\r') _exec_cmd "$_CMD_BUF"; _CMD_BUF="" ;;
       ESC)             _CMD_BUF="" ;;
       $'\x7f'|$'\x08') _CMD_BUF="${_CMD_BUF%?}" ;;
-      *) _CMD_BUF+="$key" ;;
+      *) [[ "$key" > $'\x1f' && "$key" != $'\x7f' ]] && _CMD_BUF+="$key" ;;
     esac
     return
   fi
@@ -1410,7 +1410,7 @@ handle_key() {
       k|UP)
         [[ $_SEARCH_SEL -gt 0 ]] && (( _SEARCH_SEL-- )) ;;
       *)
-        if [[ ${#key} -eq 1 ]]; then _SEARCH_QUERY+="$key"; _SEARCH_SEL=0; fi ;;
+        if [[ ${#key} -eq 1 && "$key" > $'\x1f' && "$key" != $'\x7f' ]]; then _SEARCH_QUERY+="$key"; _SEARCH_SEL=0; fi ;;
     esac
     return
   fi
@@ -1620,8 +1620,10 @@ while true; do
                                  || rm -f "${STATE_DIR}/animator_active"
   fi
 
-  # Timeout de 0.1s: suficiente para respuesta fluida al resize sin sobrecargar CPU
-  if IFS= read -r -s -n1 -t 0.1 key 2>/dev/null; then
+  # Timeout de 1s — bash 3.2 no soporta decimales en -t (0.1 se trunca a 0, spin loop).
+  # El resize se detecta arriba con stty size; el hook after-resize-pane envía \x1e
+  # para despertar este read inmediatamente cuando hay un resize real.
+  if IFS= read -r -s -n1 -t 1 key 2>/dev/null; then
     handle_key "$key"
     _HAS_WORKING=0
     render
