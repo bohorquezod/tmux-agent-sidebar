@@ -1,0 +1,35 @@
+tmux-agent-sidebar.tmux
+  s_fac5fe816bae3b::t_f0c2bdec984f65 4,7-17
+scripts/server-start.sh
+  s_fac5fe816bae3b::t_808135759260b6 39
+  s_fac5fe816bae3b::t_b234f5de44b8e2 63
+  s_fac5fe816bae3b::t_94cf44a4bc22e3 7-27
+scripts/sidebar.sh
+  s_fac5fe816bae3b::t_adf3eda162f3e2 80,82
+README.md
+  s_4f36985b9255b7::t_a01bc5d8a8ccc4 5-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "934913448b0bdcf7ecb4db9c3c73272553863b86",
+  "prompts": {},
+  "sessions": {
+    "s_4f36985b9255b7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1322f2d9-69ab-4cfe-aeab-3c8c91903858",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_fac5fe816bae3b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fafd2aed-25cf-43be-9b01-154c5cccd38e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
