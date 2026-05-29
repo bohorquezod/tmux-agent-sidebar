@@ -192,13 +192,21 @@ check_loop() {
     [[ "$_icon" == "I" && "$_prev" == "L" ]] && { rm -f "$_loop_f"; printf '%s' "$_icon" > "$_prev_f"; return 1; }
   }
 
-  # Registrar transición W→I
+  # Registrar transición W→I solo si hay suficiente separación desde la última.
+  # Mínimo 60s entre transiciones: distingue conversaciones activas (W→I cada pocos
+  # segundos) de loops reales (ciclos separados por minutos).
   if [[ ( "$_prev" == "W" || "$_prev" == "L" ) && ( "$_icon" == "I" || "$_icon" == "P" ) ]]; then
     local _now; _now=$(date +%s)
-    printf '%s\n' "$_now" >> "$_loop_f"
+    # Leer la última entrada para verificar espaciado mínimo
+    local _last_ts="0"
+    [[ -f "$_loop_f" ]] && _last_ts=$(tail -1 "$_loop_f" 2>/dev/null)
+    [[ -z "$_last_ts" || ! "$_last_ts" =~ ^[0-9]+$ ]] && _last_ts=0
+    if (( _now - _last_ts >= 60 )); then
+      printf '%s\n' "$_now" >> "$_loop_f"
+    fi
     # Podar entradas antiguas (>600s)
     local _cutoff=$(( _now - 600 )) _trimmed="" _ts
-    while IFS= read -r _ts; do
+    [[ -f "$_loop_f" ]] && while IFS= read -r _ts; do
       [[ -n "$_ts" && "$_ts" -gt "$_cutoff" ]] && _trimmed+="${_ts}"$'\n'
     done < "$_loop_f"
     printf '%s' "$_trimmed" > "$_loop_f"
