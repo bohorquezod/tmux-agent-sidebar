@@ -1,0 +1,19 @@
+scripts/sidebar.sh
+  s_f7e552934e65bd::t_65485a18310696 1584-1585,1587-1592,1609-1610
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a211576ef753b582847c7fd3a6b7a13f8d1e90d8",
+  "prompts": {},
+  "sessions": {
+    "s_f7e552934e65bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47c89bf4-2c52-4187-a87b-cab1e2bcc39c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
