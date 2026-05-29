@@ -136,6 +136,19 @@ detect_icon() {
   printf '%s' "$_icon"
 }
 
+# Resuelve el PID real de Claude: el propio pane_pid si tiene session file,
+# o el primer hijo que tenga session file (cuando Claude corre dentro de un shell).
+effective_claude_pid() {
+  local _ppid="$1"
+  [[ -f "${CLAUDE_SESSIONS_DIR}/${_ppid}.json" ]] && { printf '%s' "$_ppid"; return; }
+  # Buscar en hijos directos
+  local _cp
+  while IFS= read -r _cp; do
+    [[ -n "$_cp" && -f "${CLAUDE_SESSIONS_DIR}/${_cp}.json" ]] && { printf '%s' "$_cp"; return; }
+  done < <(pgrep -P "$_ppid" 2>/dev/null)
+  printf '%s' "$_ppid"
+}
+
 # Devuelve las siglas del sub-agente leyendo el campo "agent" del session file.
 agent_sigla() {
   local _ppid="$1"
@@ -159,7 +172,7 @@ check_loop() {
   local _wkey="$1" _icon="$2"
   local _prev_f="${STATE_DIR}/${_wkey}.dprev"
   local _loop_f="${STATE_DIR}/${_wkey}.looptimes"
-  local _prev; _prev=$(<"$_prev_f" 2>/dev/null)
+  local _prev; _prev=$(cat "$_prev_f" 2>/dev/null)
 
   # Si el usuario visitó la ventana (sidebar borra .unread), resetear loop counter
   [[ ! -f "${STATE_DIR}/${_wkey}.unread" && -f "$_loop_f" ]] && {
@@ -242,8 +255,9 @@ build_data() {
       # Shell conocido: no necesita contenido
       case "$_c" in zsh|bash|sh|fish|dash) continue ;; esac
       # Session file dice busy → es W seguro, skip captura
-      local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
-      if [[ -f "$_sf" ]] && kill -0 "$_ppid" 2>/dev/null; then
+      local _eff_ppid; _eff_ppid=$(effective_claude_pid "$_ppid")
+      local _sf="${CLAUDE_SESSIONS_DIR}/${_eff_ppid}.json"
+      if [[ -f "$_sf" ]] && kill -0 "$_eff_ppid" 2>/dev/null; then
         local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
         [[ "$_st" == "busy" ]] && continue
       fi
@@ -322,14 +336,55 @@ build_data() {
         local _cap_key="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         printf '%s' "$_lines" > "${CAPTURES_DIR}/${_cap_key}"
 
-        local _icon; _icon=$(detect_icon "$_cappid" "$_capcmd" "$_lines" "$_captitle" "$_capdead")
+        # Resolver PID real de Claude (puede ser hijo del pane_pid si arrancó desde shell)
+        local _eff_pid; _eff_pid=$(effective_claude_pid "$_cappid")
+
+        local _icon; _icon=$(detect_icon "$_eff_pid" "$_capcmd" "$_lines" "$_captitle" "$_capdead")
+
+        # Window key para archivos de estado
+        local _wkey="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
 
         # Loop detection
-        local _wkey="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         check_loop "$_wkey" "$_icon" && _icon="L"
 
+        # Crashed detection (shell volvió pero Claude murió mientras estaba busy)
+        # Guardamos el último PID conocido de Claude por ventana
+        if [[ "$_icon" == "E" ]]; then
+          local _cpid_f="${STATE_DIR}/${_wkey}.last_cpid"
+          if [[ -f "$_cpid_f" ]]; then
+            local _last_cpid; _last_cpid=$(cat "$_cpid_f" 2>/dev/null)
+            if [[ -n "$_last_cpid" ]] && ! kill -0 "$_last_cpid" 2>/dev/null; then
+              local _csf="${CLAUDE_SESSIONS_DIR}/${_last_cpid}.json"
+              if [[ -f "$_csf" ]]; then
+                local _cst; _cst=$(grep -o '"status":"[^"]*"' "$_csf" | cut -d'"' -f4 2>/dev/null)
+                if [[ "$_cst" == "busy" ]]; then
+                  # Verificar que el X no es demasiado viejo (max 120s)
+                  local _xcf="${STATE_DIR}/${_wkey}.xctime"
+                  [[ ! -f "$_xcf" ]] && printf '%s' "$(date +%s)" > "$_xcf"
+                  local _xct; _xct=$(cat "$_xcf" 2>/dev/null)
+                  local _now; _now=$(date +%s)
+                  if (( _now - _xct < 120 )); then
+                    _icon="X"
+                  else
+                    rm -f "$_cpid_f" "$_xcf"
+                  fi
+                else
+                  rm -f "$_cpid_f" "${STATE_DIR}/${_wkey}.xctime"
+                fi
+              fi
+            else
+              rm -f "${STATE_DIR}/${_wkey}.xctime"
+            fi
+          fi
+        else
+          # Guardar PID cuando Claude está activo (no shell)
+          [[ -n "$_eff_pid" && "$_eff_pid" != "$_cappid" || -f "${CLAUDE_SESSIONS_DIR}/${_eff_pid}.json" ]] && \
+            printf '%s' "$_eff_pid" > "${STATE_DIR}/${_wkey}.last_cpid"
+          rm -f "${STATE_DIR}/${_wkey}.xctime"
+        fi
+
         # Agent sigla
-        local _sigla=""; _sigla=$(agent_sigla "$_cappid")
+        local _sigla=""; _sigla=$(agent_sigla "$_eff_pid")
 
         local _islast=0; (( _wj + 1 >= _wtotal )) && _islast=1
         _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}"$'\n'
