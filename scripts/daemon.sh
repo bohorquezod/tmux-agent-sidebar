@@ -81,12 +81,13 @@ detect_icon() {
     fi
     local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
     case "$_st" in
-      busy) printf 'W'; return ;;
+      busy)    printf 'W'; return ;;
+      waiting) printf 'P'; return ;;  # AskUserQuestion, permission dialog, cualquier espera de input
       idle)
-        # Distinguir idle limpio de blocked (diálogo de permiso)
+        # Doble chequeo: idle con diálogo de permiso visible en contenido
         if [[ -n "$_lines" ]] && \
            ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
-             [[ "$_lines" == *"[Always]"* ]] ); then
+             [[ "$_lines" == *"[Always]"* ]] || [[ "$_lines" == *"Enter to select"* ]] ); then
           printf 'P'; return
         fi
         printf 'I'; return ;;
@@ -97,10 +98,10 @@ detect_icon() {
   if [[ -n "$_title" ]]; then
     local _fc="${_title:0:1}"
     if [[ "$_fc" == "✳" ]]; then
-      # Idle según título — revisar si hay diálogo de permiso en contenido
+      # Idle según título — revisar si el contenido indica espera de input del usuario
       if [[ -n "$_lines" ]] && \
          ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
-           [[ "$_lines" == *"[Always]"* ]] ); then
+           [[ "$_lines" == *"[Always]"* ]] || [[ "$_lines" == *"Enter to select"* ]] ); then
         printf 'P'; return
       fi
       printf 'I'; return
@@ -125,13 +126,15 @@ detect_icon() {
   _tmp="${_narrow##*❯}";          _tlen=${#_tmp}
   [[ "$_narrow" == *"❯"*      && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="I"; }
 
-  # Permission patterns → P (más urgente que idle simple)
-  _tmp="${_narrow##*\[Yes\]}";    _tlen=${#_tmp}
-  [[ "$_narrow" == *"[Yes]"*  && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
-  _tmp="${_narrow##*\[No\]}";     _tlen=${#_tmp}
-  [[ "$_narrow" == *"[No]"*   && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
-  _tmp="${_narrow##*\[Always\]}"; _tlen=${#_tmp}
-  [[ "$_narrow" == *"[Always]"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
+  # Permission/question patterns → P (necesitan acción del usuario)
+  _tmp="${_narrow##*\[Yes\]}";          _tlen=${#_tmp}
+  [[ "$_narrow" == *"[Yes]"*         && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
+  _tmp="${_narrow##*\[No\]}";           _tlen=${#_tmp}
+  [[ "$_narrow" == *"[No]"*          && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
+  _tmp="${_narrow##*\[Always\]}";       _tlen=${#_tmp}
+  [[ "$_narrow" == *"[Always]"*      && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
+  _tmp="${_narrow##*Enter to select}";  _tlen=${#_tmp}
+  [[ "$_narrow" == *"Enter to select"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
 
   printf '%s' "$_icon"
 }
