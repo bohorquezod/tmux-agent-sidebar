@@ -161,7 +161,7 @@ effective_claude_pid() {
   printf '%s' "$_ppid"
 }
 
-# Devuelve las siglas del sub-agente leyendo el campo "agent" del session file.
+# Devuelve el nombre completo del sub-agente leyendo el campo "agent" del session file.
 agent_sigla() {
   local _ppid="$1"
   local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
@@ -169,13 +169,7 @@ agent_sigla() {
   local _agent
   _agent=$(grep -o '"agent":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
   [[ -z "$_agent" ]] && return
-  case "$_agent" in
-    pl|tl)     printf '%s' "${_agent^^}" ;;
-    developer) printf 'DV' ;;
-    reviewer)  printf 'RV' ;;
-    runner)    printf 'RN' ;;
-    *)         printf '%s' "${_agent:0:2}" | tr '[:lower:]' '[:upper:]' ;;
-  esac
+  printf '%s' "$_agent"
 }
 
 # Detecta si una ventana está en loop (≥3 transiciones W→I en 10 min).
