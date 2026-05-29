@@ -1581,9 +1581,15 @@ render
 LAST_RENDER=$SECONDS
 DATA_MTIME=$(file_mtime "$DATA_FILE")
 SESS_MTIME=$(file_mtime "${STATE_DIR}/current_session")
+# Tamaño inicial para detectar cambios sin depender de SIGWINCH interrumpiendo read
+LAST_SZ=$(stty size 2>/dev/null)
 while true; do
-  # Re-render cuando DATA_FILE cambia (daemon), current_session cambia (navegación),
-  # SIGWINCH (resize), o cada 2s como fallback
+  # Detectar resize por polling: en macOS bash 3.2 SIGWINCH no interrumpe read -t,
+  # así que no podemos confiar en que _WINCH=1 llegue a tiempo durante el drag.
+  # stty size consulta TIOCGWINSZ directamente → detecta el cambio en cada iteración.
+  _cur_sz=$(stty size 2>/dev/null)
+  [[ "$_cur_sz" != "$LAST_SZ" ]] && { LAST_SZ="$_cur_sz"; _WINCH=1; _RESIZE=1; }
+
   _cur_mtime=$(file_mtime "$DATA_FILE")
   _cur_sess_mtime=$(file_mtime "${STATE_DIR}/current_session")
   if [[ "$_cur_mtime" != "$DATA_MTIME" || "$_cur_sess_mtime" != "$SESS_MTIME" \
@@ -1600,7 +1606,8 @@ while true; do
                                  || rm -f "${STATE_DIR}/animator_active"
   fi
 
-  if IFS= read -r -s -n1 -t 1 key 2>/dev/null; then
+  # Timeout de 0.1s: suficiente para respuesta fluida al resize sin sobrecargar CPU
+  if IFS= read -r -s -n1 -t 0.1 key 2>/dev/null; then
     handle_key "$key"
     _HAS_WORKING=0
     render
