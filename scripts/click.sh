@@ -157,3 +157,4 @@ $TMUXBIN split-window -hb -l "$SIDEBAR_W" -t "$_target" \
 NEW_PANE_ID=$($TMUXBIN display-message -p '#{pane_id}' 2>/dev/null)
 [[ -n "$NEW_PANE_ID" ]] && $TMUXBIN select-pane -t "$NEW_PANE_ID" -T "Sessions" 2>/dev/null
 _dedup_sessions_panes "$DEST_SESS:$DEST_WIN" "$NEW_PANE_ID"
+exit 0
