@@ -81,8 +81,17 @@ detect_icon() {
     fi
     local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
     case "$_st" in
-      busy)    printf 'W'; return ;;
-      waiting) printf 'P'; return ;;  # AskUserQuestion, permission dialog, cualquier espera de input
+      busy) printf 'W'; return ;;
+      waiting)
+        # Verificar que el contenido todavía muestra la UI de pregunta/permiso.
+        # Si la sesión dice "waiting" pero el pane ya no muestra nada relevante,
+        # el estado es stale → tratar como idle.
+        if [[ -n "$_lines" ]] && \
+           ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
+             [[ "$_lines" == *"[Always]"* ]] || [[ "$_lines" == *"Enter to select"* ]] ); then
+          printf 'P'; return
+        fi
+        printf 'I'; return ;;
       idle)
         # Doble chequeo: idle con diálogo de permiso visible en contenido
         if [[ -n "$_lines" ]] && \
