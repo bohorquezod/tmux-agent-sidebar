@@ -350,8 +350,10 @@ _kill_current() {
 
 # ── Help overlay ─────────────────────────────────────────────────────────────
 render_help() {
-  local W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] 2>/dev/null && W=28
-  local H="${LINES:-24}";   [[ "$H" -lt 4 ]] 2>/dev/null && H=24
+  local _sz W H
+  _sz=$(stty size 2>/dev/null)
+  W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
+  H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
   local buf=""
   buf+=" ${PU}◈${R}  ${WH}Help${R}"$'\n'
@@ -413,8 +415,12 @@ render() {
       | awk -F'|' '$1=="1"{print $2; exit}')
   fi
 
-  local W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] 2>/dev/null && W=28
-  local H="${LINES:-24}";   [[ "$H" -lt 4 ]] 2>/dev/null && H=24
+  # stty size lee TIOCGWINSZ directamente — refleja el tamaño real del pty incluso cuando
+  # $COLUMNS no se ha actualizado aún (bash solo lo actualiza tras comandos externos, no read).
+  local _sz W H
+  _sz=$(stty size 2>/dev/null)
+  W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
+  H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
   # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho.
   # Durante drag activo (SIGWINCH) sincronizar todos los panes sidebar para evitar que
   # el servidor rebote entre anchos de distintos clientes.
