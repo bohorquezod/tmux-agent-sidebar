@@ -1,0 +1,19 @@
+scripts/click.sh
+  s_f7e552934e65bd::t_03b4765406b712 160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "260bfe05c3b89321a92c261585d0437c549662c7",
+  "prompts": {},
+  "sessions": {
+    "s_f7e552934e65bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47c89bf4-2c52-4187-a87b-cab1e2bcc39c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
