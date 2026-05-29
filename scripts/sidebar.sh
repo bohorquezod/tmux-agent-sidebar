@@ -77,9 +77,9 @@ _ANIMATOR_PID=$!
 _dpid_file="${STATE_DIR}/daemon.pid"
 if [[ ! -f "$_dpid_file" ]] || ! kill -0 "$(<"$_dpid_file")" 2>/dev/null; then
   if [[ -n "$OUTER_TMUX_SOCKET" ]]; then
-    TMUX="${OUTER_TMUX_SOCKET},0,0" nohup bash "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
+    TMUX="${OUTER_TMUX_SOCKET},0,0" nohup "$BASH" "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
   else
-    nohup bash "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
+    nohup "$BASH" "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
   fi
   disown $! 2>/dev/null
   _i=0

@@ -2,6 +2,15 @@
 
 Sidebar para tmux que muestra todas las sesiones y ventanas de todos los servidores tmux activos, con indicadores de estado de Claude Code en cada ventana.
 
+## Prerequisitos
+
+- **tmux 3.0+**
+- **bash 4+** — macOS incluye bash 3.2 por default, que no es compatible.
+
+  ```bash
+  brew install bash
+  ```
+
 ## Instalación
 
 ### Via TPM (desde GitHub)

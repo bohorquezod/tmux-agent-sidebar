@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 # Entry point del plugin tmux-agent-sidebar
 
-# Require bash 4+
+# Si corremos bajo bash 3 (macOS system default), buscar bash 4+ y re-ejecutar
 _bash_ver="${BASH_VERSINFO[0]:-0}"
 if (( _bash_ver < 4 )); then
-  tmux display-message "tmux-agent-sidebar requires bash 4+. Current: ${BASH_VERSION}. Install via Homebrew: brew install bash"
-  exit 1
+  _b4=""
+  for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if [[ -x "$_b" && "$("$_b" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]]; then
+      _b4="$_b"; break
+    fi
+  done
+  if [[ -z "$_b4" ]]; then
+    tmux display-message "tmux-agent-sidebar requires bash 4+. Install: brew install bash"
+    exit 1
+  fi
+  exec "$_b4" "$0" "$@"
 fi
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"

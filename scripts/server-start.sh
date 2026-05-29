@@ -4,6 +4,27 @@
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+
+# Localizar bash 4+ — prioriza Homebrew (Apple Silicon y Intel), luego PATH
+_find_bash4() {
+  local _b
+  for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if [[ -x "$_b" && "$("$_b" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]]; then
+      echo "$_b"; return
+    fi
+  done
+  # Fallback: usar bash del PATH si ya es 4+
+  local _pb; _pb="$(command -v bash 2>/dev/null)"
+  if [[ -n "$_pb" && "$("$_pb" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]]; then
+    echo "$_pb"; return
+  fi
+  echo ""
+}
+BASH4="$(_find_bash4)"
+if [[ -z "$BASH4" ]]; then
+  tmux display-message "tmux-agent-sidebar: bash 4+ not found. Install via: brew install bash" 2>/dev/null
+  exit 1
+fi
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 CLIENTS_DIR="${STATE_DIR}/clients"
 SERVER="tmux-agent-sidebar"
@@ -15,7 +36,7 @@ mkdir -p "$STATE_DIR" "$CLIENTS_DIR"
 # 1. Arrancar daemon en el contexto del outer server (hereda $TMUX del outer server)
 _dpid_file="${STATE_DIR}/daemon.pid"
 if [[ ! -f "$_dpid_file" ]] || ! kill -0 "$(<"$_dpid_file")" 2>/dev/null; then
-  nohup bash "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
+  nohup "$BASH4" "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
   _i=0
   while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do sleep 0.1; ((_i++)); done
 fi
@@ -39,7 +60,7 @@ $TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y 5
   -e "OUTER_TMUX_SOCKET=$OUTER_SOCKET" \
   -e "PLUGIN_DIR=$PLUGIN_DIR" \
   -e "STATE_DIR=$STATE_DIR" \
-  "exec bash $PLUGIN_DIR/scripts/sidebar.sh"
+  "exec $BASH4 $PLUGIN_DIR/scripts/sidebar.sh"
 
 # 5. Configurar sidebar server: sin status bar, sin prefix, sin mouse
 $TMUXBIN -L "$SERVER" set-option -g status off
