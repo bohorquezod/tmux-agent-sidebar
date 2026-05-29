@@ -43,6 +43,20 @@ Después `prefix+I`.
 
 Los números ordinales (`1`, `2.3`, etc.) activan el command buffer para navegar directamente a una sesión o ventana.
 
+## Window states
+
+Each window displays an icon indicating the state of the Claude Code agent running in it.
+
+| Icon | State   | Meaning                                                          |
+| ---- | ------- | ---------------------------------------------------------------- |
+| `·`  | Empty   | No Claude agent running (shell or blank pane)                    |
+| `⠿`  | Working | Claude is actively executing tools or processing                 |
+| `○`  | Idle    | Claude is waiting for the next user message                      |
+| `?`  | Blocked | Claude is waiting for a permission decision (`[Yes]` / `[No]`)  |
+| `↺`  | Loop    | Claude appears stuck in a repetitive cycle                       |
+| `✗`  | Crashed | Claude process died unexpectedly while it was working            |
+| `◉`  | Unread  | Claude finished working while you were in another window         |
+
 ## Configuración
 
 Todas las opciones son opcionales. Agregalas en `~/.tmux.conf` antes de cargar el plugin.
@@ -72,15 +86,18 @@ run-shell '~/ruta/a/tmux-agent-sidebar/tmux-agent-sidebar.tmux'
 El plugin expone un token compacto con conteos de actividad de agentes para
 integrar en el `status-right` (u otro componente) del status bar de tmux.
 
-**Formato**: `⚡N ⏸N ◉N` — los conteos de cero se omiten.
+**Formato**: `⚡N ?N ↺N ✗N ⏸N ◉N` — los conteos de cero se omiten.
 
-| Símbolo | Significado        |
-| ------- | ------------------ |
-| `⚡N`   | N agentes working  |
-| `⏸N`   | N agentes idle     |
-| `◉N`   | N ventanas unread  |
+| Símbolo | Significado             |
+| ------- | ----------------------- |
+| `⚡N`   | N agentes working       |
+| `?N`    | N agentes blocked       |
+| `↺N`    | N agentes en loop       |
+| `✗N`    | N agentes crashed       |
+| `⏸N`   | N agentes idle          |
+| `◉N`   | N ventanas unread       |
 
-Ejemplos de output: `⚡2 ⏸1`, `⏸3 ◉1`, `⚡1` (vacío cuando no hay agentes activos).
+Ejemplos de output: `⚡2 ⏸1`, `⏸3 ◉1`, `⚡1 ?1` (vacío cuando no hay agentes activos).
 
 ### Opción 1 — `#{@agent_sidebar_summary}` (recomendada)
 
@@ -105,14 +122,15 @@ set -g status-right "#(cat ${TMPDIR:-/tmp}/agent-sidebar/summary) %H:%M"
 
 ### Opción 3 — script standalone
 
-Útil si se quiere usar el token sin tener el sidebar abierto:
+Alternativa a leer el archivo directamente:
 
 ```tmux
 set -g status-right "#(~/path/to/tmux-agent-sidebar/scripts/summary.sh) %H:%M"
 ```
 
-`scripts/summary.sh` lee el data file del daemon directamente y no requiere
-conexión con ningún proceso adicional.
+`scripts/summary.sh` lee el archivo `summary` escrito por el daemon. Equivalente
+a la opción 2 pero útil cuando se prefiere delegar la ruta al script.
+
 ## Actualizaciones
 
 Los plugins no se actualizan automáticamente.

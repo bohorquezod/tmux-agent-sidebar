@@ -51,23 +51,44 @@ Each line is pipe-separated:
 ```
 S|server_name|is_current(0/1)
 E|server_name|session_name|is_active(0/1)
-W|server_name|session_name|win_idx|win_name|icon|is_last(0/1)
+W|server_name|session_name|win_idx|win_name|icon|agent_sigla|is_last(0/1)
 ```
 
-Icon codes in `W` lines: `E` (empty/shell), `W` (working), `I` (idle/awaiting input).
-These are internal codes — `sidebar.sh` maps them to display icons (`·`, Braille spinner, `○`).
+Icon codes in `W` lines — internal codes mapped to display icons by `sidebar.sh`:
+
+| Code | Display | Meaning                                                                    |
+| ---- | ------- | -------------------------------------------------------------------------- |
+| `E`  | `·`     | Empty / shell — no Claude agent running                                    |
+| `W`  | spinner | Working — Claude is actively executing tools or processing                 |
+| `I`  | `○`     | Idle — Claude is waiting for the next user message                         |
+| `P`  | `?`     | Blocked — permission dialog visible (`[Yes]`, `[No]`, `[Always]`)          |
+| `L`  | `↺`     | Loop — ≥3 `W→I` transitions in 10 min with ≥60 s spacing                  |
+| `X`  | `✗`     | Crashed — Claude process died while session file shows `status: busy`      |
 
 ## Icon detection
 
-`detect_icon` in `daemon.sh` identifies Claude Code state from a pane and returns `E`, `W`, or `I`:
+`detect_icon` in `daemon.sh` returns one of six codes (`E`, `W`, `I`, `P`, `L`, `X`). Detection
+runs in priority order:
 
-1. **Fast path (pane title)**: Claude Code sets its title to `✳` when idle and a Braille spinner
-   (`U+2800–U+28FF`) when working. This is the reliable path — no `capture-pane` needed.
-2. **Fallback (content scan)**: Looks for `⏺` (tool execution), `❯` (prompt), or
-   `[Yes]/[No]/[Always]` (permission dialogs) in the last ~1500 chars of captured pane output.
+1. **Session file** (`~/.claude/sessions/<pid>.json`) — primary source. Reads the `status` field:
+   `busy → W`; `idle/waiting → I` (or `P` if a permission dialog is also visible in pane content).
+   If the process is dead and `status` was `busy`, returns `X`.
+2. **Pane title** (OSC 2) — fast fallback for versions without a session file. `✳` = idle (`I`);
+   Braille spinner (`U+2800–U+28FF`) = working (`W`).
+3. **Content scan** — last resort. Scans the last ~1 500 chars of captured pane output for `⏺`
+   (tool execution → `W`), `❯` (prompt → `I`), or permission patterns → `P`.
 
-`sidebar.sh` adds a fourth state, **unread** (`◉`), derived from a `.unread` flag file
-written when a window transitions `W → I` while the user is not looking at it.
+`L` and `X` are applied after `detect_icon` returns, by `check_loop` and the crashed-detection
+block in `build_data`, respectively:
+
+- **`L` (loop)**: `check_loop` records each `W→I` transition timestamp. When ≥3 transitions occur
+  within 10 min with ≥60 s between each, the code is overridden to `L`. Resets when the user
+  visits the window (`.unread` file is removed).
+- **`X` (crashed)**: when a window falls back to `E` but the last known Claude PID has a session
+  file with `status: busy`, the code is set to `X` for up to 120 s, then clears automatically.
+
+`sidebar.sh` derives a seventh display state, **unread** (`◉`), from a `.unread` flag file written
+when a window transitions `W → I` while the user is not looking at it.
 
 ## Bash compatibility
 
