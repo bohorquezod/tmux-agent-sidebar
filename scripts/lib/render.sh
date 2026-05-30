@@ -31,6 +31,7 @@ render_help() {
   buf+=" ${WH}K${R}    move up"$'\n'
   buf+=$'\n'
   buf+=" ${GR}Other${R}"$'\n'
+  buf+=" ${WH}i${R}    window info"$'\n'
   buf+=" ${WH}:${R}    command  ${GR}N / N.M${R}"$'\n'
   buf+=" ${WH}r${R}    reload"$'\n'
   buf+=" ${WH}q${R}    quit"$'\n'
@@ -41,9 +42,73 @@ render_help() {
   printf '\033[H\033[J%s' "$buf"
 }
 
+# ── Info overlay ─────────────────────────────────────────────────────────────
+render_info() {
+  local _sz W
+  _sz=$(stty size 2>/dev/null)
+  W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
+  local sep; sep=$(printf '─%.0s' $(seq 1 $W))
+  local buf=""
+  buf+=" ${PU}◈${R}  ${WH}Window Info${R}"$'\n'
+  buf+="${GR}${sep}${R}"$'\n'
+  buf+=$'\n'
+
+  local _maxw=$(( W - 12 )); [[ $_maxw -lt 6 ]] && _maxw=6
+
+  # Window name
+  local _wn_disp="${_INFO_WNAME:0:$_maxw}"
+  [[ ${#_INFO_WNAME} -gt $_maxw ]] && _wn_disp="${_INFO_WNAME:0:$(( _maxw - 1 ))}…"
+  buf+=" ${GR}window ${R} ${WH}${_wn_disp}${R}"$'\n'
+
+  # Status
+  local _slabel _scol
+  case "$_INFO_STATUS" in
+    W) _slabel="working"; _scol="$CY" ;;
+    I) _slabel="idle";    _scol="$GR" ;;
+    P) _slabel="blocked"; _scol="$RD" ;;
+    L) _slabel="loop";    _scol="$YL" ;;
+    X) _slabel="crashed"; _scol="$RD" ;;
+    *) _slabel="empty";   _scol="$GR" ;;
+  esac
+  buf+=" ${GR}status ${R} ${_scol}${_slabel}${R}"$'\n'
+  buf+=$'\n'
+
+  # Project
+  if [[ -n "$_INFO_PROJECT" ]]; then
+    local _proj_disp="${_INFO_PROJECT:0:$_maxw}"
+    [[ ${#_INFO_PROJECT} -gt $_maxw ]] && _proj_disp="${_INFO_PROJECT:0:$(( _maxw - 1 ))}…"
+    buf+=" ${GR}project${R} ${WH}${_proj_disp}${R}"$'\n'
+  fi
+
+  # Branch
+  if [[ -n "$_INFO_BRANCH" ]]; then
+    local _br_disp="${_INFO_BRANCH:0:$_maxw}"
+    [[ ${#_INFO_BRANCH} -gt $_maxw ]] && _br_disp="${_INFO_BRANCH:0:$(( _maxw - 1 ))}…"
+    buf+=" ${GR}branch ${R} ${WH}${_br_disp}${R}"$'\n'
+  fi
+
+  # PR
+  if [[ -n "$_INFO_PR_URL" ]]; then
+    local _pr_disp="${_INFO_PR_URL:0:$_maxw}"
+    [[ ${#_INFO_PR_URL} -gt $_maxw ]] && _pr_disp="${_INFO_PR_URL:0:$(( _maxw - 1 ))}…"
+    buf+=" ${GR}pr     ${R} ${CY}${_pr_disp}${R}"$'\n'
+  fi
+
+  # Agent sigla
+  if [[ -n "$_INFO_AGENT" ]]; then
+    buf+=" ${GR}agent  ${R} ${PU}${_INFO_AGENT}${R}"$'\n'
+  fi
+
+  buf+=$'\n'
+  buf+="${GR}${sep}${R}"$'\n'
+  buf+="${GR} [i] or [Esc] to close${R}"$'\n'
+  printf '\033[H\033[J%s' "$buf"
+}
+
 # ── Render ────────────────────────────────────────────────────────────────────
 render() {
   [[ "$_HELP_MODE" -eq 1 ]] && { render_help; return; }
+  [[ "$_INFO_MODE"  -eq 1 ]] && { render_info; return; }
   [[ ! -f "$DATA_FILE" ]] && return
 
   (( _SPIN_FRAME = (_SPIN_FRAME + 1) % 10 ))
