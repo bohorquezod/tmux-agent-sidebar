@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # click.sh — navega al target y abre/refresca el sidebar en destino
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
