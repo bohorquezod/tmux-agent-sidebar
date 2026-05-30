@@ -54,7 +54,7 @@ _try_acquire_lock() {
 if ! _try_acquire_lock; then
   exit 0
 fi
-trap 'rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"' EXIT INT TERM
+trap 'rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"; rm -f "${DATA_FILE}.tmp"* 2>/dev/null' EXIT INT TERM
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,11 +69,12 @@ current_server_name() {
 #   W|server|session|win_idx|win_name|icon|agent_sigla|is_last(0/1)
 
 build_data() {
-  local _current _socket_dir _buf _tmpdir _servers
+  local _current _socket_dir _buf _tmpdir _servers _tmpfile
   _current=$(current_server_name)
   _socket_dir="${TMPDIR:-/tmp}/tmux-$(id -u)"
   _buf=""
   _tmpdir=$(mktemp -d)
+  _tmpfile="$(mktemp "${DATA_FILE}.XXXXXX")"
   _servers=("$_current")
 
   if [[ -d "$_socket_dir" ]]; then
@@ -245,8 +246,8 @@ build_data() {
   done
 
   rm -rf "$_tmpdir"
-  printf '%s' "$_buf" > "${DATA_FILE}.tmp"
-  mv "${DATA_FILE}.tmp" "$DATA_FILE"
+  printf '%s' "$_buf" > "$_tmpfile"
+  mv "$_tmpfile" "$DATA_FILE"
 }
 
 # ── Build summary token ───────────────────────────────────────────────────────
