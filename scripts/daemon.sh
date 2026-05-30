@@ -31,30 +31,30 @@ source "${SCRIPT_DIR}/lib/detect.sh"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
 LOCK_DIR="${STATE_DIR}/daemon.lock"
-_LOCK_PID_FILE="${LOCK_DIR}/pid"
+
+_daemon_cleanup() {
+  rm -rf "${STATE_DIR}/daemon.lock"
+  rm -f  "${PID_FILE}"
+}
 
 _try_acquire_lock() {
-  if mkdir "$LOCK_DIR" 2>/dev/null; then
-    printf '%d' "$$" > "$_LOCK_PID_FILE"
-    printf '%d' "$$" > "$PID_FILE"
-    return 0
+  if ! mkdir "${STATE_DIR}/daemon.lock" 2>/dev/null; then
+    local old_pid
+    old_pid="$(cat "$PID_FILE" 2>/dev/null)"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      return 1  # genuinely alive
+    fi
+    # Stale lock — remove and retry
+    rm -rf "${STATE_DIR}/daemon.lock"
+    mkdir "${STATE_DIR}/daemon.lock" 2>/dev/null || return 1
   fi
-  local _epid; _epid=$(cat "$_LOCK_PID_FILE" 2>/dev/null)
-  [[ -z "$_epid" ]] && _epid=$(cat "$PID_FILE" 2>/dev/null)
-  if [[ -n "$_epid" ]] && kill -0 "$_epid" 2>/dev/null; then
-    return 1
-  fi
-  rm -rf "$LOCK_DIR"
-  mkdir "$LOCK_DIR" 2>/dev/null || return 1
-  printf '%d' "$$" > "$_LOCK_PID_FILE"
   printf '%d' "$$" > "$PID_FILE"
-  return 0
 }
 
 if ! _try_acquire_lock; then
   exit 0
 fi
-trap 'rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"' EXIT INT TERM
+trap _daemon_cleanup EXIT INT TERM
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
