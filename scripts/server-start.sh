@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # server-start.sh — garantiza que el sidebar server tmux-agent-sidebar está corriendo
 # Idempotente: puede llamarse múltiples veces sin efecto secundario
 
@@ -38,11 +39,11 @@ _dpid_file="${STATE_DIR}/daemon.pid"
 if [[ ! -f "$_dpid_file" ]] || ! kill -0 "$(<"$_dpid_file")" 2>/dev/null; then
   nohup "$BASH4" "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
   _i=0
-  while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do sleep 0.1; ((_i++)); done
+  while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do sleep 0.1; ((_i++)) || true; done
 fi
 
 # 2. Si el sidebar server ya tiene la sesión activa: nada que hacer
-$TMUXBIN -L "$SERVER" has-session -t "$SESSION" 2>/dev/null && exit 0
+if $TMUXBIN -L "$SERVER" has-session -t "$SESSION" 2>/dev/null; then exit 0; fi
 
 # 3. Determinar ancho inicial por servidor
 OUTER_SERVER="${OUTER_SOCKET##*/}"

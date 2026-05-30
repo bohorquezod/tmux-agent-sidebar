@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # toggle.sh — abre/cierra el sidebar conectando al sidebar server tmux-agent-sidebar
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"

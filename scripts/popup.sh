@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # popup.sh — abre el sidebar como overlay flotante con display-popup (tmux 3.3+)
 # Si la versión de tmux es anterior, hace fallback al modo split-pane.
 
