@@ -5,7 +5,7 @@
 
 # ── Reordenamiento de sesiones ────────────────────────────────────────────────
 save_session_order() {
-  > "$ORDER_FILE"
+  : > "$ORDER_FILE"
   local _e
   for _e in "${SESSIONS_FLAT[@]}"; do printf '%s\n' "$_e" >> "$ORDER_FILE"; done
   touch "$DIRTY_FILE"
@@ -145,6 +145,7 @@ _kill_current() {
     done
 
     "${_tmux_cmd[@]}" kill-window -t "${_sess}:${_widx}" 2>/dev/null
+    # shellcheck disable=SC2034  # CURSOR_ITEM read by sidebar main loop
     [[ $_parent_si -ge 0 ]] && CURSOR_ITEM="${ITEMS_FLAT[$_parent_si]}"
   fi
 

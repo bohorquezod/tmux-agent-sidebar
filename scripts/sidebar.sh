@@ -19,8 +19,10 @@ PLUGIN_VERSION="$(cat "$PLUGIN_DIR/VERSION" 2>/dev/null | tr -d '[:space:]')"
 [[ -z "$PLUGIN_VERSION" ]] && PLUGIN_VERSION="dev"
 STATE_DIR="${STATE_DIR:-${TMPDIR:-/tmp}/agent-sidebar}"
 DATA_FILE="${STATE_DIR}/data"
+# shellcheck disable=SC2034  # DIRTY_FILE used in sourced lib modules (ops.sh, cmd.sh)
 DIRTY_FILE="${STATE_DIR}/dirty"
 CLIENTS_DIR="${STATE_DIR}/clients"
+# shellcheck disable=SC2034  # ORDER_FILE used in sourced lib modules (ops.sh)
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
 
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR"
@@ -97,6 +99,7 @@ if [[ -f "${STATE_DIR}/just_visited" ]]; then
   printf '💤' > "${STATE_DIR}/${_jvk}.prev_icon"
 fi
 
+# shellcheck disable=SC2034  # ANSI color vars used in sourced render.sh
 R=$'\033[0m';  G=$'\033[32m';  BG=$'\033[1;32m'
 PU=$'\033[1;35m'; GR=$'\033[90m'; RD=$'\033[31m'; YL=$'\033[1;33m'; CY=$'\033[1;36m'; WH=$'\033[1;37m'
 
@@ -304,6 +307,7 @@ handle_key() {
         for _e in "${SESSIONS_FLAT[@]}"; do
           [[ "$_e" == "$_cur_rest" ]] && { _sf_idx=$_k; break; }; (( _k++ ))
         done
+        # shellcheck disable=SC2034  # CURSOR_ITEM read by ops.sh
         CURSOR_ITEM="$_cur_item"; move_session_up $_sf_idx
       elif [[ "$_cur_type" == "W" ]]; then
         move_window_up $SELECTED
@@ -337,7 +341,9 @@ handle_key() {
         local _first_win="" _ii2=0
         for _it2 in "${ITEMS_FLAT[@]}"; do
           if [[ "${_it2%%|*}" == "W" ]]; then
-            local _r2="${_it2#*|}"; local _s2="${_r2%%|*}" _r3="${_r2#*|}" _ss2="${_r3%%|*}"
+            local _r2="${_it2#*|}"
+            local _s2="${_r2%%|*}" _r3="${_r2#*|}"
+            local _ss2="${_r3%%|*}"
             [[ "$_s2" == "$_srv" && "$_ss2" == "$_sess" ]] && { _first_win="${_s2}:${_r3#*|}"; break; }
           fi
           (( _ii2++ ))
