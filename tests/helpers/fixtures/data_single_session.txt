@@ -1,0 +1,4 @@
+S|server1|1
+E|server1|main|1
+W|server1|main|0|editor|W||0
+W|server1|main|1|shell|E||1
