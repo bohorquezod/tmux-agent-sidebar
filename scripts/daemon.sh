@@ -25,6 +25,9 @@ CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+readonly CRASH_TTL_SECS=120
+
 # Source detection library (defines detect_icon, effective_claude_pid, agent_sigla, check_loop)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/detect.sh"
@@ -214,7 +217,7 @@ build_data() {
                   [[ ! -f "$_xcf" ]] && printf '%s' "$(date +%s)" > "$_xcf"
                   local _xct; _xct=$(cat "$_xcf" 2>/dev/null)
                   local _now; _now=$(date +%s)
-                  if (( _now - _xct < 120 )); then
+                  if (( _now - _xct < CRASH_TTL_SECS )); then
                     _icon="X"
                   else
                     rm -f "$_cpid_f" "$_xcf"

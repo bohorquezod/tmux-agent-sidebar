@@ -2,6 +2,11 @@
 # Sourced by daemon.sh. Assumes STATE_DIR, CLAUDE_SESSIONS_DIR are already set.
 # No shebang — not executed directly.
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+readonly LOOP_WINDOW_SECS=600
+readonly LOOP_MIN_TRANSITIONS=3
+readonly LOOP_MIN_SPACING_SECS=60
+
 # Devuelve el código de icono para un pane.
 # Argumentos: ppid(pane_pid) cmd lines title pdead(pane_dead)
 # Códigos de retorno: E W I P L X
@@ -146,11 +151,11 @@ check_loop() {
     local _last_ts="0"
     [[ -f "$_loop_f" ]] && _last_ts=$(tail -1 "$_loop_f" 2>/dev/null)
     [[ -z "$_last_ts" || ! "$_last_ts" =~ ^[0-9]+$ ]] && _last_ts=0
-    if (( _now - _last_ts >= 60 )); then
+    if (( _now - _last_ts >= LOOP_MIN_SPACING_SECS )); then
       printf '%s\n' "$_now" >> "$_loop_f"
     fi
     # Podar entradas antiguas (>600s)
-    local _cutoff=$(( _now - 600 )) _trimmed="" _ts
+    local _cutoff=$(( _now - LOOP_WINDOW_SECS )) _trimmed="" _ts
     [[ -f "$_loop_f" ]] && while IFS= read -r _ts; do
       [[ -n "$_ts" && "$_ts" -gt "$_cutoff" ]] && _trimmed+="${_ts}"$'\n'
     done < "$_loop_f"
@@ -166,7 +171,7 @@ check_loop() {
     _loop_count=$(grep -c '[0-9]' "$_loop_f" 2>/dev/null || echo 0)
   fi
 
-  if [[ "${_loop_count:-0}" -ge 3 && ( "$_icon" == "I" || "$_icon" == "P" || "$_icon" == "L" ) ]]; then
+  if [[ "${_loop_count:-0}" -ge $LOOP_MIN_TRANSITIONS && ( "$_icon" == "I" || "$_icon" == "P" || "$_icon" == "L" ) ]]; then
     _save_icon="L"
     printf '%s' "L" > "$_prev_f"
     return 0
