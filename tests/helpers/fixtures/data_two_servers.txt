@@ -1,0 +1,10 @@
+S|server1|1
+E|server1|work|1
+W|server1|work|0|editor|W|ag1|0
+W|server1|work|1|tests|I||1
+E|server1|personal|0
+W|server1|personal|0|notes|E||1
+S|server2|0
+E|server2|remote|1
+W|server2|remote|0|deploy|P||0
+W|server2|remote|1|logs|I||1
