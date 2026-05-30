@@ -25,6 +25,11 @@ CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
 CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
+readonly TAB=$'\t'
+readonly FIELD_SEP='|'
+readonly DAEMON_SLEEP_INTERVAL=0.2
+readonly CRASH_TTL_SECS=120
+
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
 # Source libraries
@@ -101,7 +106,7 @@ build_data() {
     local _sargs=()
     [[ "$_server" != "$_current" ]] && _sargs=(-S "$_socket_dir/$_server")
     local _is_cur=0; [[ "$_server" == "$_current" ]] && _is_cur=1
-    _buf+="S|${_server}|${_is_cur}"$'\n'
+    _buf+="S${FIELD_SEP}${_server}${FIELD_SEP}${_is_cur}"$'\n'
 
     local _SESS _WINS _PANES
     _SESS=$($TMUXBIN "${_sargs[@]}" list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null) || continue
@@ -112,7 +117,7 @@ build_data() {
       -F '#{pane_id}|#{pane_pid}|#{pane_dead}|#{session_name}|#{window_index}|#{pane_current_command}|#{pane_title}' 2>/dev/null)
 
     # Capturas en paralelo — omite panes que no necesitan content scan
-    while IFS='|' read -r _paneid _ppid _pdead _s _w _c _pt; do
+    while IFS="$FIELD_SEP" read -r _paneid _ppid _pdead _s _w _c _pt; do
       # Pane muerto: no capturar, se maneja por estado
       [[ "$_pdead" == "1" ]] && continue
       # Shell conocido: no necesita contenido
@@ -138,12 +143,12 @@ build_data() {
 
     # Ordenar sesiones según ORDER_FILE
     local _sess_raw=() _sess_sorted=()
-    while IFS='|' read -r _sn _sa; do
+    while IFS="$FIELD_SEP" read -r _sn _sa; do
       [[ -z "$_sn" ]] && continue
       _sess_raw+=("${_sn}|${_sa}")
     done <<< "$_SESS"
     if [[ -f "$ORDER_FILE" ]]; then
-      while IFS='|' read -r _osrv _osess; do
+      while IFS="$FIELD_SEP" read -r _osrv _osess; do
         [[ "$_osrv" == "$_server" ]] || continue
         for _se in "${_sess_raw[@]}"; do
           [[ "${_se%%|*}" == "$_osess" ]] && { _sess_sorted+=("$_se"); break; }
@@ -174,19 +179,19 @@ build_data() {
       local _is_active=0; [[ "${_attached:-0}" -gt 0 ]] && _is_active=1
 
       local _wins=()
-      while IFS='|' read -r _ws _wi _wn; do
+      while IFS="$FIELD_SEP" read -r _ws _wi _wn; do
         [[ "$_ws" == "$_sess" ]] && _wins+=("${_wi}|${_wn}")
       done <<< "$_WINS"
       local _wtotal=${#_wins[@]}
 
-      _buf+="E|${_server}|${_sess}|${_is_active}"$'\n'
+      _buf+="E${FIELD_SEP}${_server}${FIELD_SEP}${_sess}${FIELD_SEP}${_is_active}"$'\n'
 
       local _wj=0
       for _wentry in "${_wins[@]}"; do
         local _widx="${_wentry%%|*}" _wname="${_wentry#*|}"
         local _capid="" _cappid="" _capdead="0" _capcmd="" _captitle=""
         # Tomar el primer pane no-sidebar de la ventana
-        while IFS='|' read -r _paneid _ppid _pdead _ps _pw _pc _pt; do
+        while IFS="$FIELD_SEP" read -r _paneid _ppid _pdead _ps _pw _pc _pt; do
           [[ "$_ps" == "$_sess" && "$_pw" == "$_widx" ]] || continue
           [[ "$_pt" == "Sessions" ]] && continue
           _capid="$_paneid"; _cappid="$_ppid"; _capdead="$_pdead"
@@ -226,7 +231,7 @@ build_data() {
                   [[ ! -f "$_xcf" ]] && printf '%s' "$(date +%s)" > "$_xcf"
                   local _xct; _xct=$(cat "$_xcf" 2>/dev/null)
                   local _now; _now=$(date +%s)
-                  if (( _now - _xct < 120 )); then
+                  if (( _now - _xct < CRASH_TTL_SECS )); then
                     _icon="$STATE_CRASHED"
                   else
                     rm -f "$_cpid_f" "$_xcf"
@@ -262,7 +267,7 @@ build_data() {
         fi
 
         local _islast=0; (( _wj + 1 >= _wtotal )) && _islast=1
-        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}|${_ptitle}"$'\n'
+        _buf+="W${FIELD_SEP}${_server}${FIELD_SEP}${_sess}${FIELD_SEP}${_widx}${FIELD_SEP}${_wname}${FIELD_SEP}${_icon}${FIELD_SEP}${_sigla}${FIELD_SEP}${_islast}${FIELD_SEP}${_ptitle}"$'\n'
         (( _wj++ ))
       done
     done
@@ -283,7 +288,7 @@ build_summary() {
   local _type _server _sess _widx _wname _icon _sigla _islast _f
 
   if [[ -f "$DATA_FILE" ]]; then
-    while IFS='|' read -r _type _server _sess _widx _wname _icon _sigla _islast; do
+    while IFS="$FIELD_SEP" read -r _type _server _sess _widx _wname _icon _sigla _islast; do
       [[ "$_type" == "W" ]] || continue
       case "$_icon" in
         W) (( _working++ ))  ;;
@@ -347,7 +352,7 @@ while true; do
 
   if [[ "$HAS_WORKING" == true ]]; then
     _SB=true
-    _SLEEP=0.2
+    _SLEEP=$DAEMON_SLEEP_INTERVAL
   else
     (( SECONDS - LAST_BUILD >= _interval )) && _SB=true
     _SLEEP=$_interval
