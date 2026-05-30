@@ -9,4 +9,8 @@ if [[ -z "$BATS" ]]; then
   exit 1
 fi
 
+if command -v shellcheck &>/dev/null; then
+  shellcheck "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/scripts/lib/*.sh
+fi
+
 "$BATS" "$REPO_ROOT/tests/"*.bats

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # ops.sh — session/window order operations and kill/rename
 # Sourced by sidebar.sh. Assumes all sidebar globals are already set.
 # No shebang — not executed directly.
