@@ -101,6 +101,20 @@ Types: `fix`, `feat`, `refactor`, `docs`, `chore` — scopes: `sidebar`, `daemon
 
 See [docs/pr-process.md](./docs/pr-process.md) for the full PR lifecycle.
 
+## Shell formatting
+
+All scripts in `scripts/` are formatted with [shfmt](https://github.com/mvdan/sh) using these flags:
+
+```
+shfmt -i 2 -ci -bn -w scripts/
+```
+
+- `-i 2` — 2-space indentation
+- `-ci` — indent switch cases
+- `-bn` — keep binary operators at end of line
+
+Install shfmt locally (`brew install shfmt` or `go install mvdan.cc/sh/v3/cmd/shfmt@latest`) and run the command above before opening a PR. CI will fail if formatting is inconsistent.
+
 ## Development workflow
 
 See [CLAUDE.md](./CLAUDE.md) for architecture details and the development reload cycle.

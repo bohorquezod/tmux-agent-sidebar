@@ -1,0 +1,12 @@
+name: shfmt
+on: [push, pull_request]
+jobs:
+  shfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mfinelli/setup-shfmt@v3
+        with:
+          shfmt-version: '3.8.0'
+      - name: Check shell formatting
+        run: shfmt -i 2 -ci -bn -d scripts/
