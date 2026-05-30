@@ -366,6 +366,14 @@ handle_key() {
     w) jump_next_working ;;
     u) jump_next_unread ;;
 
+    m)
+      if [[ "$_cur_type" == "W" ]]; then
+        local _msrv="${_cur_rest%%|*}" _mwr="${_cur_rest#*|}"
+        local _msess="${_mwr%%|*}" _mwidx="${_mwr#*|}"
+        local _mkey="${_msrv//[^a-zA-Z0-9_-]/_}_${_msess//[^a-zA-Z0-9_-]/_}_${_mwidx}"
+        touch "${STATE_DIR}/${_mkey}.unread"
+      fi ;;
+
     q|Q)
       if [[ -n "$POPUP_MODE" ]]; then
         exit 0
