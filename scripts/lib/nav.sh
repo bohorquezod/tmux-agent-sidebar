@@ -87,3 +87,8 @@ _resolve_ordinal() {
   _ri_ci="${ITEMS_FLAT[$_wfound]}"; _ri_ct="W"; _ri_cr="${_ri_ci#*|}"; return 0
 }
 _ri_ci="" _ri_ct="" _ri_cr=""
+
+# ── Mark all windows as read ──────────────────────────────────────────────────
+mark_all_read() {
+  rm -f "${STATE_DIR}"/*.unread
+}

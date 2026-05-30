@@ -365,6 +365,7 @@ handle_key() {
 
     w) jump_next_working ;;
     u) jump_next_unread ;;
+    U) mark_all_read ;;
 
     q|Q)
       if [[ -n "$POPUP_MODE" ]]; then
