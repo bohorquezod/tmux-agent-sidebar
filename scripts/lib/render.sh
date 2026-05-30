@@ -1,4 +1,5 @@
 # render.sh — sidebar rendering (render, render_help, file_mtime)
+# shellcheck shell=bash
 # Sourced by sidebar.sh. Assumes all sidebar globals are already set.
 # No shebang — not executed directly.
 
