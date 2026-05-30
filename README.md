@@ -140,6 +140,34 @@ set -g status-right "#(~/path/to/tmux-agent-sidebar/scripts/summary.sh) %H:%M"
 `scripts/summary.sh` lee el archivo `summary` escrito por el daemon. Equivalente
 a la opción 2 pero útil cuando se prefiere delegar la ruta al script.
 
+## Debugging
+
+Set `AGENT_SIDEBAR_LOG=2` to enable verbose logging to `${TMPDIR:-/tmp}/agent-sidebar/debug.log`:
+
+```tmux
+# In tmux.conf (persistent):
+set-environment -g AGENT_SIDEBAR_LOG 2
+
+# Or for a single session:
+AGENT_SIDEBAR_LOG=2 tmux source-file tmux-agent-sidebar.tmux
+```
+
+Then tail the log:
+
+```bash
+tail -f "${TMPDIR:-/tmp}/agent-sidebar/debug.log"
+```
+
+Log levels:
+
+| Level | Meaning                    |
+| ----- | -------------------------- |
+| `0`   | Off (default)              |
+| `1`   | Info and warnings          |
+| `2`   | Debug (verbose)            |
+
+The log is automatically rotated when it exceeds 1 MB (previous log saved as `debug.log.1`).
+
 ## Actualizaciones
 
 Los plugins no se actualizan automáticamente.

@@ -96,6 +96,7 @@ detect_icon() {
   _tmp="${_narrow##*Enter to select}";  _tlen=${#_tmp}
   [[ "$_narrow" == *"Enter to select"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
 
+  _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd result=$_icon"
   printf '%s' "$_icon"
 }
 

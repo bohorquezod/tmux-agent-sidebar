@@ -28,6 +28,7 @@ mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 # Source detection library (defines detect_icon, effective_claude_pid, agent_sigla, check_loop)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/detect.sh"
+source "${SCRIPT_DIR}/lib/log.sh"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
 LOCK_DIR="${STATE_DIR}/daemon.lock"
@@ -69,6 +70,7 @@ current_server_name() {
 #   W|server|session|win_idx|win_name|icon|agent_sigla|is_last(0/1)
 
 build_data() {
+  _log_debug "daemon: starting build_data cycle"
   local _current _socket_dir _buf _tmpdir _servers
   _current=$(current_server_name)
   _socket_dir="${TMPDIR:-/tmp}/tmux-$(id -u)"
@@ -94,6 +96,7 @@ build_data() {
 
     local _SESS _WINS _PANES
     _SESS=$($TMUXBIN "${_sargs[@]}" list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null) || continue
+    _log_debug "daemon: server=$_server found $(printf '%s\n' "$_SESS" | grep -c .) sessions"
     _WINS=$($TMUXBIN "${_sargs[@]}" list-windows -a -F '#{session_name}|#{window_index}|#{window_name}' 2>/dev/null)
     # Formato: pane_id|pane_pid|pane_dead|session|window|cmd|title
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
@@ -324,6 +327,15 @@ while true; do
   else
     (( SECONDS - LAST_BUILD >= _interval )) && _SB=true
     _SLEEP=$_interval
+  fi
+
+  # Rotate log if > 1 MB
+  if [[ -f "${STATE_DIR}/debug.log" ]]; then
+    local _logsize
+    _logsize=$(stat -c%s "${STATE_DIR}/debug.log" 2>/dev/null || stat -f%z "${STATE_DIR}/debug.log" 2>/dev/null || echo 0)
+    if (( _logsize > 1048576 )); then
+      mv "${STATE_DIR}/debug.log" "${STATE_DIR}/debug.log.1"
+    fi
   fi
 
   if [[ "$_SB" == true ]]; then
