@@ -59,6 +59,7 @@ source "${SCRIPT_DIR}/lib/nav.sh"
 source "${SCRIPT_DIR}/lib/ops.sh"
 source "${SCRIPT_DIR}/lib/cmd.sh"
 source "${SCRIPT_DIR}/lib/render.sh"
+source "${SCRIPT_DIR}/lib/log.sh"
 
 _RELOADING=0
 _ANIMATOR_PID=0
