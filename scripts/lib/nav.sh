@@ -61,6 +61,45 @@ jump_next_unread() {
   done
 }
 
+# ── Salto entre secciones de servidor (] y [) ────────────────────────────────
+# Collect indices of first S item per unique server, in display order
+_server_section_starts() {
+  local _prev_srv="" _i=0
+  _server_starts=()
+  for _it in "${ITEMS_FLAT[@]}"; do
+    if [[ "${_it%%|*}" == "S" ]]; then
+      local _srv="${_it#*|}"; _srv="${_srv%%|*}"
+      [[ "$_srv" != "$_prev_srv" ]] && { _server_starts+=($_i); _prev_srv="$_srv"; }
+    fi
+    (( _i++ ))
+  done
+}
+
+jump_next_server() {
+  [[ ${#ITEMS_FLAT[@]} -eq 0 ]] && return
+  _server_section_starts
+  local _n=${#_server_starts[@]}
+  [[ $_n -le 1 ]] && return
+  local _cur=0 _j
+  for (( _j=0; _j<_n; _j++ )); do
+    [[ ${_server_starts[$_j]} -le $SELECTED ]] && _cur=$_j
+  done
+  SELECTED=${_server_starts[$(( (_cur + 1) % _n ))]}
+}
+
+jump_prev_server() {
+  [[ ${#ITEMS_FLAT[@]} -eq 0 ]] && return
+  _server_section_starts
+  local _n=${#_server_starts[@]}
+  [[ $_n -le 1 ]] && return
+  local _cur=0 _j
+  for (( _j=0; _j<_n; _j++ )); do
+    [[ ${_server_starts[$_j]} -le $SELECTED ]] && _cur=$_j
+  done
+  SELECTED=${_server_starts[$(( (_cur - 1 + _n) % _n ))]}
+}
+_server_starts=()
+
 # ── Resolver item por ordinal (N o N.M) desde ITEMS_FLAT ─────────────────────
 # Salida: escribe en las variables globales _ri_ci, _ri_ct, _ri_cr
 # Retorna 1 si no encuentra el item.

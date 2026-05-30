@@ -435,6 +435,8 @@ handle_key() {
 
     w) jump_next_working ;;
     u) jump_next_unread ;;
+    "]") jump_next_server ;;
+    "[") jump_prev_server ;;
     U) mark_all_read ;;
 
     m)
