@@ -1,4 +1,6 @@
-# render.sh — sidebar rendering (render, render_help, file_mtime)
+# render.sh — top-level render orchestration
+# shellcheck shell=bash
+# Requires: render-icons.sh and render-row.sh sourced first (done by sidebar.sh).
 # Sourced by sidebar.sh. Assumes all sidebar globals are already set.
 # No shebang — not executed directly.
 
@@ -531,17 +533,10 @@ render() {
         [[ -f "$_flag_f" && "$_state" != "working" ]] && _state="unread"
       fi
 
-      # Seleccionar icono y colores según estado
+      # Seleccionar icono y colores según estado (via render-icons.sh)
       local _display_icon _icon_col _name_col
-      case "$_state" in
-        empty)   _display_icon="·";                          _icon_col="$GR"; _name_col="$GR" ;;
-        idle)    _display_icon="○";                          _icon_col="$GR"; _name_col="$GR" ;;
-        working) _display_icon="${_SPINNER[$_SPIN_FRAME]}";  _icon_col="$CY"; _name_col="$CY" ;;
-        blocked) _display_icon="?";                          _icon_col="$RD"; _name_col="$RD" ;;
-        loop)    _display_icon="↺";                          _icon_col="$YL"; _name_col="$YL" ;;
-        crashed) _display_icon="✗";                          _icon_col="$RD"; _name_col="$GR" ;;
-        unread)  _display_icon="◉";                          _icon_col="$YL"; _name_col="$YL" ;;
-      esac
+      IFS=$'\t' read -r _display_icon _icon_col _name_col \
+        < <(icon_display_attrs "$_state")
       local _agent_badge=""
       [[ -n "$_wagent" ]] && _agent_badge="[${_wagent}] "
 
