@@ -59,6 +59,8 @@ source "${SCRIPT_DIR}/lib/sidebar-utils.sh"
 source "${SCRIPT_DIR}/lib/nav.sh"
 source "${SCRIPT_DIR}/lib/ops.sh"
 source "${SCRIPT_DIR}/lib/cmd.sh"
+source "${SCRIPT_DIR}/lib/render-icons.sh"
+source "${SCRIPT_DIR}/lib/render-row.sh"
 source "${SCRIPT_DIR}/lib/render.sh"
 
 _RELOADING=0
