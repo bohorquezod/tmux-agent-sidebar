@@ -68,6 +68,7 @@ render_help() {
   buf+=" ${GR}Jump${R}"$'\n'
   buf+=" ${WH}w${R}    next working ${CY}⠿${R}"$'\n'
   buf+=" ${WH}u${R}    next unread  ${YL}◉${R}"$'\n'
+  buf+=" ${WH}m${R}    mark unread  ${YL}◉${R}"$'\n'
   buf+=$'\n'
   buf+=" ${GR}Reorder${R}"$'\n'
   buf+=" ${WH}J${R}    move down"$'\n'
