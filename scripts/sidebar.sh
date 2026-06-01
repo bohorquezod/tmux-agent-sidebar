@@ -381,6 +381,7 @@ handle_key() {
 
     w) jump_next_working ;;
     u) jump_next_unread ;;
+    U) mark_all_read ;;
 
     m)
       if [[ "$_cur_type" == "W" ]]; then
