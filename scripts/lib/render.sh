@@ -1,6 +1,6 @@
-# render.sh — sidebar rendering (render, render_help, file_mtime)
-# Sourced by sidebar.sh. Assumes all sidebar globals are already set.
-# No shebang — not executed directly.
+# render.sh — sidebar rendering entry point and frame loop
+# Sourced by sidebar.sh. No shebang — not executed directly.
+# Requires: render-icons.sh and render-row.sh sourced first.
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
@@ -57,8 +57,9 @@ render() {
   fi
 
   # Resolver sesión y ventana activa del outer server en este ciclo de render
-  local _outer_sess _outer_win
+  # _outer_sess and _outer_win are globals so render_window_row can read them
   _outer_sess=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+  _outer_win=""
   local _df_mtime; _df_mtime=$(file_mtime "$DATA_FILE")
   local _search_fast_path=0
   [[ "$_SEARCH_MODE" == "1" && "$_df_mtime" == "$_RENDER_DATA_MTIME" && ${#ITEMS_FLAT[@]} -gt 0 ]] && _search_fast_path=1
@@ -73,7 +74,7 @@ render() {
 
   # stty size lee TIOCGWINSZ directamente — refleja el tamaño real del pty incluso cuando
   # $COLUMNS no se ha actualizado aún (bash solo lo actualiza tras comandos externos, no read).
-  local _sz W H
+  local _sz H
   _sz=$(stty size 2>/dev/null)
   W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
   H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
@@ -96,7 +97,7 @@ render() {
           done
     fi
   fi
-  local max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
+  max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
 
   if [[ "$_search_fast_path" == "0" ]]; then
@@ -177,11 +178,7 @@ render() {
     local _oi _or _osrv _or2 _osess _owid
     for _oi in "${_old_items[@]}"; do
       [[ "${_oi%%|*}" != "W" ]] && continue
-      _or="${_oi#*|}"
-      _osrv="${_or%%|*}"
-      _or2="${_or#*|}"
-      _osess="${_or2%%|*}"
-      _owid="${_or2#*|}"
+      _or="${_oi#*|}"; _osrv="${_or%%|*}"; _or2="${_or#*|}"; _osess="${_or2%%|*}"; _owid="${_or2#*|}"
       [[ "$_osrv" == "$_srv" && "$_osess" == "$_sess" ]] && _old_wins+=("$_owid")
     done
 
@@ -238,7 +235,7 @@ render() {
   [[ $SELECTED -ge ${#ITEMS_FLAT[@]} ]] && SELECTED=$(( ${#ITEMS_FLAT[@]} - 1 ))
   [[ $SELECTED -lt 0 ]] && SELECTED=0
 
-  local _cur_sess="${_outer_sess:-}"
+  _cur_sess="${_outer_sess:-}"
 
   # ── Precalcular conteos para el footer de estado ─────────────────────────
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _pc=0 _lc=0 _xc=0
@@ -334,7 +331,7 @@ render() {
   fi
 
   # Detectar sesión padre del cursor (para resaltado blanco en modo ventana)
-  local _cursor_parent_item=""
+  _cursor_parent_item=""
   if [[ "${ITEMS_FLAT[$SELECTED]%%|*}" == "W" ]]; then
     local _cpi=$SELECTED
     while (( _cpi > 0 )); do
@@ -346,7 +343,7 @@ render() {
   fi
 
   # ── Drill-down mode: "N." o "N.M" en el buffer → mostrar solo esa sesión ──
-  local _drill_mode=0 _drill_snum=0 _drill_wnum="" _in_drill_sess=0 _win_ord=0
+  _drill_mode=0; _drill_snum=0; _drill_wnum=""; _in_drill_sess=0; _win_ord=0
   if [[ "$_CMD_BUF" =~ ^:?([0-9]+)\.([0-9]*)$ ]]; then
     _drill_mode=1
     _drill_snum="${BASH_REMATCH[1]}"
@@ -354,7 +351,7 @@ render() {
   fi
 
   # ── Construir buffer de display ───────────────────────────────────────────
-  local buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
+  buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
 
   # Mode indicator: [NAV] | [CMD] <buffer> | [SRCH] <query>
   local _mode_label _hdr_text _hdr_len _pad_len _hdr_spaces
@@ -399,9 +396,9 @@ render() {
     for _fk in "${_win_keys[@]}"; do
       local _fmeta="${_win_meta[$_fk]:-}"
       local _fk_srv="${_fk%%|*}" _fk_rest="${_fk#*|}"
-      local _fk_sess="${_fk_rest%%|*}" _fk_widx="${_fk_rest#*|}"
-      # icon is second field of meta: name|icon|agent|last
+      local _fk_sess="${_fk_rest%%|*}"
       local _fk_icon; _fk_icon=$(printf '%s' "$_fmeta" | cut -d'|' -f2)
+      local _fk_widx="${_fk_rest#*|}"
       local _fmatch=0
       case "$_FILTER_STATUS" in
         working) [[ "$_fk_icon" == "W" || "$_fk_icon" == "L" ]] && _fmatch=1 ;;
@@ -416,20 +413,21 @@ render() {
     done
   fi
 
+  # ── Main display loop ─────────────────────────────────────────────────────
+  local _item
   for _item in "${ITEMS_FLAT[@]}"; do
     local _itype="${_item%%|*}" _irest="${_item#*|}"
 
     if [[ "$_itype" == "S" ]]; then
       local _srv="${_irest%%|*}" _sess="${_irest#*|}"
-
       (( _sess_num++ ))
 
-      # Filtro de estado: saltar sesiones sin ventanas matching
+      # Filter: skip sessions with no matching windows
       if [[ -n "$_FILTER_STATUS" && "$_filt_skeys" != *" ${_srv}|${_sess}"* ]]; then
         (( _ii++ )); continue
       fi
 
-      # En drill-down: saltar sesiones que no coinciden
+      # Drill-down: skip sessions that don't match; update drill state
       if [[ "$_drill_mode" == "1" ]]; then
         if [[ $_sess_num -ne $_drill_snum ]]; then
           _in_drill_sess=0; (( _ii++ )); continue
@@ -437,47 +435,10 @@ render() {
         _in_drill_sess=1; _win_ord=0
       fi
 
-      # Header de servidor si cambia (solo en modo normal)
-      if [[ "$_srv" != "$prev_server" ]]; then
-        if [[ "$_drill_mode" == "0" ]]; then
-          [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
-          local _is_cur="${_srv_cur[$_srv]:-0}"
-          local _sic="$GR"; [[ "$_is_cur" == "1" ]] && _sic="$CY"
-          local _srvd="${_srv:0:$max}"; [[ ${#_srv} -gt $max ]] && _srvd="${_srv:0:$(( max-1 ))}…"
-          local _fill_len=$(( W - 4 - ${#_srvd} ))
-          local _fill=""
-          [[ $_fill_len -gt 0 ]] && _fill=$(printf '─%.0s' $(seq 1 $_fill_len))
-          buf+="${_sic}── ${_srvd} ${_fill}${R}"$'\n'; mapbuf+=$'\n'
-        fi
-        prev_server="$_srv"
-      fi
-
-      # ▶ indica la sesión que el cliente está viendo
-      local _is_act=0
-      if [[ "$_srv" == "$OUTER_SERVER" ]]; then
-        [[ "$_sess" == "$_cur_sess" ]] && _is_act=1
-      else
-        _is_act="${_sess_act["${_srv}|${_sess}"]:-0}"
-      fi
-
-      local _cursor=" " _ic="$GR" _nc=""
-      [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && { _cursor="›"; _ic="$YL"; }
-      if [[ "$_is_act" == "1" ]]; then
-        _cursor="▶"; _nc="$BG"
-        [[ $_ii -eq $SELECTED ]] && _ic="$YL" || _ic="$BG"
-      fi
-      [[ -n "$_cursor_parent_item" && "$_item" == "$_cursor_parent_item" ]] && _nc="$WH"
-      [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]] && { _ic="$RD"; _nc="$RD"; _cursor="✕"; }
-      local _sessd="${_sess:0:$max}"; [[ ${#_sess} -gt $max ]] && _sessd="${_sess:0:$(( max-1 ))}…"
-      if [[ "$_drill_mode" == "1" ]]; then
-        buf+="${_ic}${_cursor} ${R}  ${_nc}${_sessd}${R}"$'\n'
-      else
-        buf+="${_ic}${_cursor} ${_sess_num}${R}  ${_nc}${_sessd}${R}"$'\n'
-      fi
-      mapbuf+="${_srv}|${_sess}"$'\n'
+      render_session_row "$_item" "$_srv" "$_sess"
 
     elif [[ "$_itype" == "W" ]]; then
-      # En drill-down: saltar ventanas de sesiones que no son la drill
+      # Drill-down: skip windows outside the drill session
       if [[ "$_drill_mode" == "1" && "$_in_drill_sess" == "0" ]]; then
         (( _ii++ )); continue
       fi
@@ -486,98 +447,21 @@ render() {
       local _srv="${_irest%%|*}" _wrest="${_irest#*|}"
       local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
 
-      # Lookup O(1) via array asociativo
-      local _wmeta="${_win_meta["${_srv}|${_sess}|${_widx}"]:-}"
-      local _wname _wicon _wagent _islast
-      IFS='|' read -r _wname _wicon _wagent _islast <<< "$_wmeta"
-      [[ -z "$_wicon" ]] && _wicon="E"
-      [[ -z "$_islast" ]] && _islast="1"
-
-      # Filtro de estado: saltar ventanas que no coinciden
+      # Filter: skip windows that don't match
       if [[ -n "$_FILTER_STATUS" ]]; then
+        local _fwmeta="${_win_meta["${_srv}|${_sess}|${_widx}"]:-}"
         local _fwkey="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+        local _fwicon; _fwicon=$(printf '%s' "$_fwmeta" | cut -d'|' -f2)
         local _fwmatch=0
         case "$_FILTER_STATUS" in
-          working) [[ "$_wicon" == "W" || "$_wicon" == "L" ]] && _fwmatch=1 ;;
-          idle)    [[ "$_wicon" != "E" && "$_wicon" != "W" && "$_wicon" != "L" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+          working) [[ "$_fwicon" == "W" || "$_fwicon" == "L" ]] && _fwmatch=1 ;;
+          idle)    [[ "$_fwicon" != "E" && "$_fwicon" != "W" && "$_fwicon" != "L" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
           unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
         [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
       fi
 
-      # ── Unread tracking ──────────────────────────────────────────────────────
-      local _key="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
-      local _flag_f="${STATE_DIR}/${_key}.unread" _prev_f="${STATE_DIR}/${_key}.prev_icon"
-
-      local _state
-      case "$_wicon" in
-        "E") _state="empty" ;;
-        "W") _state="working"; _HAS_WORKING=1 ;;
-        "P") _state="blocked" ;;
-        "L") _state="loop";    _HAS_WORKING=1 ;;
-        "X") _state="crashed" ;;
-        *)   _state="idle" ;;
-      esac
-
-      if [[ "$_state" == "empty" ]]; then
-        rm -f "$_flag_f" "$_prev_f"
-      elif [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
-        rm -f "$_flag_f"; printf '💤' > "$_prev_f"
-      else
-        local _pi=""; [[ -f "$_prev_f" ]] && _pi=$(<"$_prev_f")
-        [[ "$_pi" == "W" && ( "$_state" == "idle" || "$_state" == "blocked" || "$_state" == "loop" ) ]] && touch "$_flag_f"
-        [[ "$_state" == "working" ]] && rm -f "$_flag_f"
-        printf '%s' "$_wicon" > "$_prev_f"
-        [[ -f "$_flag_f" && "$_state" != "working" ]] && _state="unread"
-      fi
-
-      # Seleccionar icono y colores según estado
-      local _display_icon _icon_col _name_col
-      case "$_state" in
-        empty)   _display_icon="·";                          _icon_col="$GR"; _name_col="$GR" ;;
-        idle)    _display_icon="○";                          _icon_col="$GR"; _name_col="$GR" ;;
-        working) _display_icon="${_SPINNER[$_SPIN_FRAME]}";  _icon_col="$CY"; _name_col="$CY" ;;
-        blocked) _display_icon="?";                          _icon_col="$RD"; _name_col="$RD" ;;
-        loop)    _display_icon="↺";                          _icon_col="$YL"; _name_col="$YL" ;;
-        crashed) _display_icon="✗";                          _icon_col="$RD"; _name_col="$GR" ;;
-        unread)  _display_icon="◉";                          _icon_col="$YL"; _name_col="$YL" ;;
-      esac
-      local _agent_badge=""
-      [[ -n "$_wagent" ]] && _agent_badge="[${_wagent}] "
-
-      local _br='└─'; [[ "$_islast" != "1" ]] && _br='├─'
-      local _wpfx
-      if [[ "$_drill_mode" == "1" ]]; then
-        if [[ $_ii -eq $SELECTED ]]; then
-          _wpfx="${YL}${_win_ord}▸${R}"
-        elif [[ -n "$_drill_wnum" && "$_win_ord" -eq "$_drill_wnum" ]]; then
-          _wpfx="${WH}${_win_ord} ${R}"
-        else
-          _wpfx="${GR}${_win_ord} ${R}"
-        fi
-      else
-        _wpfx="  "; [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && _wpfx=" ${YL}▸${R}"
-      fi
-
-      local _maxn=$(( max - 3 - ${#_agent_badge} )) _wdisp
-      [[ $_maxn -lt 4 ]] && _maxn=4
-      if [[ ${#_wname} -gt $_maxn ]]; then
-        _wdisp="${_wname:0:$(( _maxn - 1 ))}…"
-      else
-        _wdisp="${_wname:0:$_maxn}"
-      fi
-
-      local _badge_col="${PU}"
-      if [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]]; then
-        buf+="${_wpfx}${RD}${_br}${R} ${RD}✕${R} ${RD}${_agent_badge}${_wdisp}${R}"$'\n'
-      elif [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
-        local _active_icon_col="$G"
-        [[ "$_state" == "working" ]] && _active_icon_col="$CY"
-        buf+="${_wpfx}${G}${_br}${R} ${_active_icon_col}${_display_icon}${R} ${_badge_col}${_agent_badge}${R}${G}${_wdisp}${R}"$'\n'
-      else
-        buf+="${_wpfx}${GR}${_br}${R} ${_icon_col}${_display_icon}${R} ${_badge_col}${_agent_badge}${R}${_name_col}${_wdisp}${R}"$'\n'
-      fi
-      mapbuf+="${_srv}|${_sess}|${_widx}"$'\n'
+      render_window_row "$_item" "$_srv" "$_sess" "$_widx"
     fi
 
     (( _ii++ ))
