@@ -4,6 +4,49 @@
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
+# ── Differential rendering state ─────────────────────────────────────────────
+declare -a _DIFF_LINES=()
+_DIFF_W=0
+_DIFF_H=0
+_DIFF_MODE=""
+
+# _diff_print <buf> <W> <H> <mode>
+# Emits only the lines that changed since last call. Full redraw on first
+# render, resize, or mode transition (main / search / help).
+_diff_print() {
+  local buf="$1" w="$2" h="$3" mode="${4:-main}"
+  local _E=$'\033'
+
+  local -a _new=()
+  local _ln
+  while IFS= read -r _ln; do
+    _new+=("$_ln")
+  done <<< "$buf"
+
+  local _nlen=${#_new[@]} _plen=${#_DIFF_LINES[@]}
+
+  # Full redraw: first render, resize, or mode change.
+  # Overwrite in place (home → write+erase-line per line → clear rest) — never clears screen first,
+  # so there is no blank-screen flash even when the whole buffer needs to change.
+  if [[ "$w" != "$_DIFF_W" || "$h" != "$_DIFF_H" || $_plen -eq 0 || "$mode" != "$_DIFF_MODE" ]]; then
+    local _NL=$'\n' _EL=$'\033[K'
+    printf '\033[?25l\033[H%s\033[J' "${buf//$_NL/${_EL}${_NL}}"
+    _DIFF_LINES=("${_new[@]}")
+    _DIFF_W=$w; _DIFF_H=$h; _DIFF_MODE=$mode
+    return
+  fi
+
+  local _out='' _i
+  for (( _i=0; _i<_nlen; _i++ )); do
+    [[ "${_new[$_i]}" != "${_DIFF_LINES[$_i]:-}" ]] && \
+      _out+="${_E}[$(( _i + 1 ));1H${_new[$_i]}${_E}[K"
+  done
+  # Clear leftover lines if new render is shorter than previous
+  (( _plen > _nlen )) && _out+="${_E}[$(( _nlen + 1 ));1H${_E}[J"
+  [[ -n "$_out" ]] && printf '\033[?25l%s' "$_out"
+  _DIFF_LINES=("${_new[@]}")
+}
+
 # ── Help overlay ─────────────────────────────────────────────────────────────
 render_help() {
   local _sz W H
@@ -38,7 +81,7 @@ render_help() {
   buf+="${GR}${sep}${R}"$'\n'
   buf+="${GR} ? or any key to close${R}"$'\n'
   buf+=" ${GR}v${PLUGIN_VERSION}${R}"
-  printf '\033[H\033[J%s' "$buf"
+  _diff_print "$buf" "$W" "$H" "help"
 }
 
 # ── Render ────────────────────────────────────────────────────────────────────
@@ -72,12 +115,15 @@ render() {
       | awk -F'|' '$1=="1"{print $2; exit}')
   fi
 
-  # stty size lee TIOCGWINSZ directamente — refleja el tamaño real del pty incluso cuando
-  # $COLUMNS no se ha actualizado aún (bash solo lo actualiza tras comandos externos, no read).
-  local _sz H
+  # _CURRENT_W/_CURRENT_H se actualizan en sidebar.sh desde el pane externo (fuente de verdad)
+  # o desde stty. Son siempre más frescos que llamar stty aquí porque se sincronizan antes de
+  # que SIGWINCH propague. stty es el fallback cuando los globales aún no están inicializados.
+  local _sz W H
   _sz=$(stty size 2>/dev/null)
   W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
   H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
+  [[ "${_CURRENT_W:-0}" -ge 4 ]] && W="$_CURRENT_W"
+  [[ "${_CURRENT_H:-0}" -ge 4 ]] && H="$_CURRENT_H"
   # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho.
   # Durante drag activo (SIGWINCH) sincronizar todos los panes sidebar para evitar que
   # el servidor rebote entre anchos de distintos clientes.
@@ -88,14 +134,6 @@ render() {
   if [[ "$W" != "$_sw" ]]; then
     printf '%s' "$W" > "$_width_f"
     printf '%s' "$W" > "${STATE_DIR}/sidebar_width"
-    if [[ "$_RESIZE" == "1" ]]; then
-      _RESIZE=0
-      "${OUTER_TMUX[@]}" list-panes -a -F '#{pane_id}|#{pane_title}|#{pane_width}' 2>/dev/null \
-        | while IFS='|' read -r _spid _spt _spw; do
-            [[ "$_spt" == "Sessions" && "$_spw" != "$W" ]] && \
-              "${OUTER_TMUX[@]}" resize-pane -t "$_spid" -x "$W" 2>/dev/null
-          done
-    fi
   fi
   max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
@@ -123,19 +161,32 @@ render() {
       for _s in "${SESSIONS_FLAT[@]}"; do [[ "$_d" == "$_s" ]] && { _found=true; break; }; done
       [[ "$_found" == false ]] && SESSIONS_FLAT+=("$_d")
     done
-  elif [[ ${#_data_sess[@]} -ne ${#SESSIONS_FLAT[@]} ]]; then
-    local _merged=() _e _d _found
-    for _e in "${SESSIONS_FLAT[@]}"; do
-      _found=false
-      for _d in "${_data_sess[@]}"; do [[ "$_e" == "$_d" ]] && { _found=true; break; }; done
-      [[ "$_found" == true ]] && _merged+=("$_e")
-    done
-    for _d in "${_data_sess[@]}"; do
-      _found=false
-      for _e in "${_merged[@]}"; do [[ "$_d" == "$_e" ]] && { _found=true; break; }; done
-      [[ "$_found" == false ]] && _merged+=("$_d")
-    done
-    SESSIONS_FLAT=("${_merged[@]}")
+  else
+    # Merge cuando hay diferencia de count O de contenido (sesión reemplazada con mismo count)
+    local _needs_merge=0
+    [[ ${#_data_sess[@]} -ne ${#SESSIONS_FLAT[@]} ]] && _needs_merge=1
+    if [[ "$_needs_merge" -eq 0 ]]; then
+      local _e _d _found
+      for _e in "${SESSIONS_FLAT[@]}"; do
+        _found=false
+        for _d in "${_data_sess[@]}"; do [[ "$_e" == "$_d" ]] && { _found=true; break; }; done
+        [[ "$_found" == false ]] && { _needs_merge=1; break; }
+      done
+    fi
+    if [[ "$_needs_merge" -eq 1 ]]; then
+      local _merged=() _e _d _found
+      for _e in "${SESSIONS_FLAT[@]}"; do
+        _found=false
+        for _d in "${_data_sess[@]}"; do [[ "$_e" == "$_d" ]] && { _found=true; break; }; done
+        [[ "$_found" == true ]] && _merged+=("$_e")
+      done
+      for _d in "${_data_sess[@]}"; do
+        _found=false
+        for _e in "${_merged[@]}"; do [[ "$_d" == "$_e" ]] && { _found=true; break; }; done
+        [[ "$_found" == false ]] && _merged+=("$_d")
+      done
+      SESSIONS_FLAT=("${_merged[@]}")
+    fi
   fi
 
   # ── Pre-leer DATA_FILE en arrays asociativos (bash 4) ────────────────────
@@ -143,12 +194,12 @@ render() {
   _srv_cur=()
   _sess_act=()
   _win_meta=()
-  while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6 _f7; do
+  while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6 _f7 _f8; do
     case "$_t" in
       S) _srv_cur["$_f1"]="$_f2" ;;
       E) _sess_act["${_f1}|${_f2}"]="$_f3" ;;
       W) _win_keys+=("${_f1}|${_f2}|${_f3}")
-         _win_meta["${_f1}|${_f2}|${_f3}"]="${_f4}|${_f5}|${_f6}|${_f7}" ;;
+         _win_meta["${_f1}|${_f2}|${_f3}"]="${_f4}|${_f5}|${_f6}|${_f7}|${_f8}" ;;
     esac
   done < "$DATA_FILE"
   _RENDER_DATA_MTIME="$_df_mtime"
@@ -245,14 +296,14 @@ render() {
     local _wi2="${_wmeta2#*|}"  # skip name field
     _wi2="${_wi2%%|*}"          # extract icon field
     case "$_wi2" in
-      "W") (( _wc++ )); _HAS_WORKING=1 ;;
-      "I") (( _ic_raw++ )) ;;
-      "E") (( _ec++ )) ;;
-      "P") (( _pc++ )) ;;
-      "L") (( _lc++ )); _HAS_WORKING=1 ;;
-      "X") (( _xc++ )) ;;
+      "$STATE_WORKING") (( _wc++ )); _HAS_WORKING=1 ;;
+      "$STATE_IDLE")    (( _ic_raw++ )) ;;
+      "$STATE_EMPTY")   (( _ec++ )) ;;
+      "$STATE_BLOCKED") (( _pc++ )) ;;
+      "$STATE_LOOP")    (( _lc++ )); _HAS_WORKING=1 ;;
+      "$STATE_CRASHED") (( _xc++ )) ;;
     esac
-    if [[ "$_wi2" != "E" ]]; then
+    if [[ "$_wi2" != "$STATE_EMPTY" ]]; then
       local _uk2="${_wk2//[^a-zA-Z0-9_-]/_}"
       _uk2="${_uk2//|/_}"
       [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && (( _uc++ ))
@@ -326,7 +377,7 @@ render() {
 
     printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
     mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
-    printf '\033[H\033[J%s' "$buf"
+    _diff_print "$buf" "$W" "$H" "search"
     return
   fi
 
@@ -401,10 +452,10 @@ render() {
       local _fk_widx="${_fk_rest#*|}"
       local _fmatch=0
       case "$_FILTER_STATUS" in
-        working) [[ "$_fk_icon" == "W" || "$_fk_icon" == "L" ]] && _fmatch=1 ;;
+        working) [[ "$_fk_icon" == "$STATE_WORKING" || "$_fk_icon" == "$STATE_LOOP" ]] && _fmatch=1 ;;
         idle)
           local _fkey2="${_fk//[^a-zA-Z0-9_-|]/_}"; _fkey2="${_fkey2//|/_}"
-          [[ "$_fk_icon" != "E" && "$_fk_icon" != "W" && "$_fk_icon" != "L" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
+          [[ "$_fk_icon" != "$STATE_EMPTY" && "$_fk_icon" != "$STATE_WORKING" && "$_fk_icon" != "$STATE_LOOP" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
         unread)
           local _fkey2="${_fk//[^a-zA-Z0-9_-|]/_}"; _fkey2="${_fkey2//|/_}"
           [[ -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
@@ -454,8 +505,8 @@ render() {
         local _fwicon; _fwicon=$(printf '%s' "$_fwmeta" | cut -d'|' -f2)
         local _fwmatch=0
         case "$_FILTER_STATUS" in
-          working) [[ "$_fwicon" == "W" || "$_fwicon" == "L" ]] && _fwmatch=1 ;;
-          idle)    [[ "$_fwicon" != "E" && "$_fwicon" != "W" && "$_fwicon" != "L" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+          working) [[ "$_fwicon" == "$STATE_WORKING" || "$_fwicon" == "$STATE_LOOP" ]] && _fwmatch=1 ;;
+          idle)    [[ "$_fwicon" != "$STATE_EMPTY" && "$_fwicon" != "$STATE_WORKING" && "$_fwicon" != "$STATE_LOOP" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
           unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
         [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
@@ -509,5 +560,5 @@ render() {
 
   printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
   mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
-  printf '\033[H\033[J%s' "$buf"
+  _diff_print "$buf" "$W" "$H" "main"
 }

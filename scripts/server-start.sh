@@ -56,7 +56,14 @@ if [[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]]; then
 fi
 
 # 4. Crear sesión en sidebar server con config vacía (sin ~/.tmux.conf, sin plugins)
-$TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y 50 \
+# Leer el alto real del pane Sessions si existe; fallback a las dimensiones del terminal actual.
+HEIGHT=$($TMUXBIN list-panes -a -F '#{pane_title}|#{pane_height}' 2>/dev/null \
+  | awk -F'|' '$1=="Sessions"{print $2; exit}')
+if [[ -z "$HEIGHT" || ! "$HEIGHT" =~ ^[0-9]+$ ]]; then
+  HEIGHT=$(stty size 2>/dev/null | awk '{print $1}')
+  [[ -z "$HEIGHT" || ! "$HEIGHT" =~ ^[0-9]+$ ]] && HEIGHT=50
+fi
+$TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y "$HEIGHT" \
   -e "OUTER_TMUX_SOCKET=$OUTER_SOCKET" \
   -e "PLUGIN_DIR=$PLUGIN_DIR" \
   -e "STATE_DIR=$STATE_DIR" \

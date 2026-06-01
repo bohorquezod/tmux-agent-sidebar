@@ -79,7 +79,7 @@ _kill_extra_sidebars() {
 
 # Cleanup handler — called from sidebar.sh trap
 _sidebar_cleanup() {
-  printf '\033[?7h'  # re-habilitar auto-wrap al salir
+  printf '\033[?7h\033[?25h'  # re-habilitar auto-wrap y restaurar cursor al salir
   kill "$_ANIMATOR_PID" 2>/dev/null
   rm -f "$CLIENTS_DIR/$CLIENT_KEY" "$STATE_FILE" "${STATE_DIR}/animator_active"
   if [[ -z "$OUTER_TMUX_SOCKET" && "$_RELOADING" != "1" ]]; then
