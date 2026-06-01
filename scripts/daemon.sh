@@ -25,8 +25,10 @@ CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
-# Source detection library (defines detect_icon, effective_claude_pid, agent_sigla, check_loop)
+# Source libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/log.sh"
+source "${SCRIPT_DIR}/lib/states.sh"
 source "${SCRIPT_DIR}/lib/detect.sh"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
@@ -94,6 +96,7 @@ build_data() {
 
     local _SESS _WINS _PANES
     _SESS=$($TMUXBIN "${_sargs[@]}" list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null) || continue
+    _log_debug "build_data: server=$_server sessions=$(printf '%s\n' "$_SESS" | grep -c '.' 2>/dev/null || echo 0)"
     _WINS=$($TMUXBIN "${_sargs[@]}" list-windows -a -F '#{session_name}|#{window_index}|#{window_name}' 2>/dev/null)
     # Formato: pane_id|pane_pid|pane_dead|session|window|cmd|title
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
@@ -196,11 +199,11 @@ build_data() {
         local _wkey="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
 
         # Loop detection
-        check_loop "$_wkey" "$_icon" && _icon="L"
+        check_loop "$_wkey" "$_icon" && _icon="$STATE_LOOP"
 
         # Crashed detection (shell volvió pero Claude murió mientras estaba busy)
         # Guardamos el último PID conocido de Claude por ventana
-        if [[ "$_icon" == "E" ]]; then
+        if [[ "$_icon" == "$STATE_EMPTY" ]]; then
           local _cpid_f="${STATE_DIR}/${_wkey}.last_cpid"
           if [[ -f "$_cpid_f" ]]; then
             local _last_cpid; _last_cpid=$(cat "$_cpid_f" 2>/dev/null)
@@ -215,7 +218,7 @@ build_data() {
                   local _xct; _xct=$(cat "$_xcf" 2>/dev/null)
                   local _now; _now=$(date +%s)
                   if (( _now - _xct < 120 )); then
-                    _icon="X"
+                    _icon="$STATE_CRASHED"
                   else
                     rm -f "$_cpid_f" "$_xcf"
                   fi
@@ -237,8 +240,20 @@ build_data() {
         # Agent sigla
         local _sigla=""; _sigla=$(agent_sigla "$_eff_pid")
 
+        # Título del pane — quitar indicador de estado inicial (✳ o Braille) y pipes
+        local _ptitle="${_captitle}"
+        _ptitle="${_ptitle#✳ }"
+        _ptitle=$(printf '%s' "$_ptitle" | LC_ALL=C sed 's/^[[:space:]]*//; s/|//g')
+        # Quitar indicador de estado al inicio: ✳ (idle) o spinner Braille (working)
+        _ptitle="${_ptitle#✳ }"
+        # Braille u otro multi-byte + espacio: si el 1er char pesa >1 byte y el 2do es espacio
+        if [[ "${_ptitle:1:1}" == " " ]] && \
+           [[ "$(printf '%s' "${_ptitle:0:1}" | wc -c | tr -d '[:space:]')" -gt 1 ]]; then
+          _ptitle="${_ptitle:2}"
+        fi
+
         local _islast=0; (( _wj + 1 >= _wtotal )) && _islast=1
-        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}"$'\n'
+        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}|${_ptitle}"$'\n'
         (( _wj++ ))
       done
     done
@@ -327,6 +342,7 @@ while true; do
   fi
 
   if [[ "$_SB" == true ]]; then
+    _log_rotate
     build_data
     build_summary
     LAST_BUILD=$SECONDS
