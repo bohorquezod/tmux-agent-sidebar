@@ -121,6 +121,13 @@ _RENAME_BUF=""
 _RENAME_TYPE=""
 _FILTER_STATUS=""
 _HELP_MODE=0
+_INFO_MODE=0
+_INFO_WNAME=""
+_INFO_STATUS=""
+_INFO_AGENT=""
+_INFO_BRANCH=""
+_INFO_PROJECT=""
+_INFO_PR_URL=""
 
 # Data arrays — global cache repopulado solo cuando DATA_FILE cambia
 # bash 4: associative arrays replace parallel indexed arrays
@@ -185,6 +192,12 @@ handle_key() {
     _HELP_MODE=0; return
   fi
 
+  # ── Info overlay activo: i o Esc lo descarta ─────────────────────────────
+  if [[ "$_INFO_MODE" -eq 1 ]]; then
+    [[ "$key" == $'\x1e' ]] && return
+    _INFO_MODE=0; return
+  fi
+
   # ── Modo búsqueda inline ─────────────────────────────────────────────────────
   if [[ "$_SEARCH_MODE" == "1" ]]; then
     case "$key" in
@@ -241,6 +254,37 @@ handle_key() {
     $'\x1e') ;; # wake-up
 
     "?") _HELP_MODE=1 ;;
+
+    i)
+      if [[ "$_cur_type" == "W" ]]; then
+        local _isrv="${_cur_rest%%|*}" _iwr="${_cur_rest#*|}"
+        local _isess="${_iwr%%|*}" _iwidx="${_iwr#*|}"
+        local _iwmeta="${_win_meta["${_isrv}|${_isess}|${_iwidx}"]:-}"
+        local _idummy
+        IFS='|' read -r _INFO_WNAME _INFO_STATUS _INFO_AGENT _idummy <<< "$_iwmeta"
+
+        local _iwkey="${_isrv//[^a-zA-Z0-9_-]/_}_${_isess//[^a-zA-Z0-9_-]/_}_${_iwidx}"
+        local _icpid=""
+        [[ -f "${STATE_DIR}/${_iwkey}.last_cpid" ]] && _icpid=$(<"${STATE_DIR}/${_iwkey}.last_cpid")
+
+        _INFO_BRANCH=""; _INFO_PROJECT=""; _INFO_PR_URL=""
+        local _icwd=""
+        if [[ -n "$_icpid" ]]; then
+          local _isf="${HOME}/.claude/sessions/${_icpid}.json"
+          [[ -f "$_isf" ]] && _icwd=$(grep -o '"cwd":"[^"]*"' "$_isf" | cut -d'"' -f4 2>/dev/null)
+        fi
+        [[ -z "$_icwd" ]] && _icwd=$("${OUTER_TMUX[@]}" display-message -t "${_isess}:${_iwidx}" -p '#{pane_current_path}' 2>/dev/null)
+
+        if [[ -n "$_icwd" ]]; then
+          _INFO_BRANCH=$(git -C "$_icwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
+          local _igitroot; _igitroot=$(git -C "$_icwd" rev-parse --show-toplevel 2>/dev/null)
+          [[ -n "$_igitroot" ]] && _INFO_PROJECT=$(basename "$_igitroot") \
+                                || _INFO_PROJECT=$(basename "$_icwd")
+          _INFO_PR_URL=$(cd "$_icwd" && gh pr view --json url --jq '.url' 2>/dev/null)
+        fi
+
+        _INFO_MODE=1
+      fi ;;
 
     ":") _CMD_BUF=":" ;;
     "/") _SEARCH_MODE=1; _SEARCH_QUERY=""; _SEARCH_SEL=0; _SEARCH_ITEMS=() ;;
