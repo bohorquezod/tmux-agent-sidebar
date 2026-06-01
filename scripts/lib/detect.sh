@@ -7,19 +7,20 @@
 # Códigos de retorno: E W I P L X
 detect_icon() {
   local _ppid="$1" _cmd="$2" _lines="$3" _title="${4:-}" _pdead="${5:-0}"
+  local _r
 
   # Pane muerto — sin icono activo; puede ser X si tenía sesión busy
   if [[ "$_pdead" == "1" ]]; then
     local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
     if [[ -f "$_sf" ]]; then
       local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
-      [[ "$_st" == "busy" ]] && { printf 'X'; return; }
+      if [[ "$_st" == "busy" ]]; then _r='X'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return; fi
     fi
-    printf 'E'; return
+    _r='E'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return
   fi
 
   # Shell conocido → vacío
-  case "$_cmd" in zsh|bash|sh|fish|dash) printf 'E'; return ;; esac
+  case "$_cmd" in zsh|bash|sh|fish|dash) _r='E'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return ;; esac
 
   # Fuente primaria: session file de Claude (~/.claude/sessions/{ppid}.json)
   local _sf="${CLAUDE_SESSIONS_DIR}/${_ppid}.json"
@@ -27,12 +28,12 @@ detect_icon() {
     if ! kill -0 "$_ppid" 2>/dev/null; then
       # Proceso muerto con session file — crashed si estaba busy
       local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
-      [[ "$_st" == "busy" ]] && { printf 'X'; return; }
-      printf 'E'; return
+      if [[ "$_st" == "busy" ]]; then _r='X'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return; fi
+      _r='E'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return
     fi
     local _st; _st=$(grep -o '"status":"[^"]*"' "$_sf" | cut -d'"' -f4 2>/dev/null)
     case "$_st" in
-      busy) printf 'W'; return ;;
+      busy) _r='W'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return ;;
       waiting)
         # Verificar que el contenido todavía muestra la UI de pregunta/permiso.
         # Si la sesión dice "waiting" pero el pane ya no muestra nada relevante,
@@ -40,17 +41,17 @@ detect_icon() {
         if [[ -n "$_lines" ]] && \
            ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
              [[ "$_lines" == *"[Always]"* ]] || [[ "$_lines" == *"Enter to select"* ]] ); then
-          printf 'P'; return
+          _r='P'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return
         fi
-        printf 'I'; return ;;
+        _r='I'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return ;;
       idle)
         # Doble chequeo: idle con diálogo de permiso visible en contenido
         if [[ -n "$_lines" ]] && \
            ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
              [[ "$_lines" == *"[Always]"* ]] || [[ "$_lines" == *"Enter to select"* ]] ); then
-          printf 'P'; return
+          _r='P'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return
         fi
-        printf 'I'; return ;;
+        _r='I'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return ;;
     esac
   fi
 
@@ -62,19 +63,19 @@ detect_icon() {
       if [[ -n "$_lines" ]] && \
          ( [[ "$_lines" == *"[Yes]"* ]] || [[ "$_lines" == *"[No]"* ]] || \
            [[ "$_lines" == *"[Always]"* ]] || [[ "$_lines" == *"Enter to select"* ]] ); then
-        printf 'P'; return
+        _r='P'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return
       fi
-      printf 'I'; return
+      _r='I'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return
     fi
     local _hex
     _hex=$(LC_ALL=C printf '%s' "$_fc" | od -A n -t x1 | tr -d ' \n')
     case "$_hex" in
-      e2a0*|e2a1*|e2a2*|e2a3*) printf 'W'; return ;;
+      e2a0*|e2a1*|e2a2*|e2a3*) _r='W'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return ;;
     esac
   fi
 
   # Fallback nivel 2: content scanning (versiones viejas / sin session file)
-  [[ -z "$_lines" ]] && { printf 'E'; return; }
+  if [[ -z "$_lines" ]]; then _r='E'; _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"; printf '%s' "$_r"; return; fi
 
   local _wide="${_lines: -1500}"
   local _narrow="${_lines: -1000}"
@@ -96,7 +97,9 @@ detect_icon() {
   _tmp="${_narrow##*Enter to select}";  _tlen=${#_tmp}
   [[ "$_narrow" == *"Enter to select"* && $_tlen -lt $_min ]] && { _min=$_tlen; _icon="P"; }
 
-  printf '%s' "$_icon"
+  _r="$_icon"
+  _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → $_r"
+  printf '%s' "$_r"
 }
 
 # Resuelve el PID real de Claude: el propio pane_pid si tiene session file,

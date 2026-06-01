@@ -25,8 +25,9 @@ CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
-# Source detection library (defines detect_icon, effective_claude_pid, agent_sigla, check_loop)
+# Source libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/log.sh"
 source "${SCRIPT_DIR}/lib/detect.sh"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
@@ -94,6 +95,7 @@ build_data() {
 
     local _SESS _WINS _PANES
     _SESS=$($TMUXBIN "${_sargs[@]}" list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null) || continue
+    _log_debug "build_data: server=$_server sessions=$(printf '%s\n' "$_SESS" | grep -c '.' 2>/dev/null || echo 0)"
     _WINS=$($TMUXBIN "${_sargs[@]}" list-windows -a -F '#{session_name}|#{window_index}|#{window_name}' 2>/dev/null)
     # Formato: pane_id|pane_pid|pane_dead|session|window|cmd|title
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
@@ -327,6 +329,7 @@ while true; do
   fi
 
   if [[ "$_SB" == true ]]; then
+    _log_rotate
     build_data
     build_summary
     LAST_BUILD=$SECONDS

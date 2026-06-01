@@ -24,5 +24,6 @@ lib_dir() {
 # Carga lib/detect.sh con STATE_DIR y CLAUDE_SESSIONS_DIR ya seteados
 load_detect() {
   setup_state_dirs
+  source "$(lib_dir)/log.sh"
   source "$(lib_dir)/detect.sh"
 }

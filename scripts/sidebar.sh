@@ -54,6 +54,7 @@ printf '%s'  "$PANE_ID" > "$STATE_FILE"
 
 # Source all lib modules (defines render, nav, ops, cmd, sidebar-utils functions)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/log.sh"
 source "${SCRIPT_DIR}/lib/sidebar-utils.sh"
 source "${SCRIPT_DIR}/lib/nav.sh"
 source "${SCRIPT_DIR}/lib/ops.sh"
