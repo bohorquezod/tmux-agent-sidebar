@@ -71,7 +71,7 @@ _server_section_starts() {
       local _srv="${_it#*|}"; _srv="${_srv%%|*}"
       [[ "$_srv" != "$_prev_srv" ]] && { _server_starts+=($_i); _prev_srv="$_srv"; }
     fi
-    (( _i++ ))
+    (( ++_i ))
   done
 }
 
@@ -108,8 +108,8 @@ _resolve_ordinal() {
   _ri_ci=""; _ri_ct=""; _ri_cr=""
   local _n=0 _ii=0 _si=-1
   for _it in "${ITEMS_FLAT[@]}"; do
-    [[ "${_it%%|*}" == "S" ]] && { (( _n++ )); [[ $_n -eq $_snum ]] && { _si=$_ii; break; }; }
-    (( _ii++ ))
+    [[ "${_it%%|*}" == "S" ]] && { (( ++_n )); [[ $_n -eq $_snum ]] && { _si=$_ii; break; }; }
+    (( ++_ii ))
   done
   [[ $_si -lt 0 ]] && return 1
   if [[ -z "$_wnum" ]]; then
@@ -119,8 +119,8 @@ _resolve_ordinal() {
   while [[ $_wi -lt ${#ITEMS_FLAT[@]} ]]; do
     local _wit="${ITEMS_FLAT[$_wi]}"
     [[ "${_wit%%|*}" == "S" ]] && break
-    [[ "${_wit%%|*}" == "W" ]] && { (( _wn++ )); [[ $_wn -eq $_wnum ]] && { _wfound=$_wi; break; }; }
-    (( _wi++ ))
+    [[ "${_wit%%|*}" == "W" ]] && { (( ++_wn )); [[ $_wn -eq $_wnum ]] && { _wfound=$_wi; break; }; }
+    (( ++_wi ))
   done
   [[ $_wfound -lt 0 ]] && return 1
   _ri_ci="${ITEMS_FLAT[$_wfound]}"; _ri_ct="W"; _ri_cr="${_ri_ci#*|}"; return 0
