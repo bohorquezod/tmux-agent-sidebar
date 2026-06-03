@@ -88,3 +88,27 @@ teardown() {
   [ "$_ri_ct" = "W" ]
   [ "$_ri_cr" = "server1|session-b|0" ]
 }
+
+# ── mark_all_read ─────────────────────────────────────────────────────────────
+
+@test "mark_all_read: removes all .unread files from STATE_DIR" {
+  touch "${STATE_DIR}/server1_session-a_0.unread"
+  touch "${STATE_DIR}/server1_session-a_1.unread"
+  touch "${STATE_DIR}/server1_session-b_0.unread"
+  mark_all_read
+  local _count
+  _count=$(find "$STATE_DIR" -name "*.unread" | wc -l)
+  [ "$_count" -eq 0 ]
+}
+
+@test "mark_all_read: no-op when no .unread files exist" {
+  run mark_all_read
+  [ "$status" -eq 0 ]
+}
+
+@test "mark_all_read: does not remove non-.unread files" {
+  touch "${STATE_DIR}/server1_session-a_0.prev_icon"
+  touch "${STATE_DIR}/server1_session-a_0.unread"
+  mark_all_read
+  [ -f "${STATE_DIR}/server1_session-a_0.prev_icon" ]
+}
