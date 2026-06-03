@@ -54,7 +54,8 @@ _try_acquire_lock() {
 if ! _try_acquire_lock; then
   exit 0
 fi
-trap 'rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"' EXIT INT TERM
+_DATA_TMP=""
+trap 'rm -f "$PID_FILE" "$_DATA_TMP"; rm -rf "$LOCK_DIR"' EXIT INT TERM
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -245,8 +246,10 @@ build_data() {
   done
 
   rm -rf "$_tmpdir"
-  printf '%s' "$_buf" > "${DATA_FILE}.tmp"
-  mv "${DATA_FILE}.tmp" "$DATA_FILE"
+  _DATA_TMP=$(mktemp "${DATA_FILE}.XXXXXX")
+  printf '%s' "$_buf" > "$_DATA_TMP"
+  mv "$_DATA_TMP" "$DATA_FILE"
+  _DATA_TMP=""
 }
 
 # ── Build summary token ───────────────────────────────────────────────────────
