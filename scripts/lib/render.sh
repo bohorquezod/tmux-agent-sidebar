@@ -4,6 +4,31 @@
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
+# Sorts SESSIONS_FLAT in-place by session name (alpha order)
+_sessions_sort_alpha() {
+  [[ ${#SESSIONS_FLAT[@]} -le 1 ]] && return
+  local _sorted=()
+  while IFS= read -r _e; do [[ -n "$_e" ]] && _sorted+=("$_e"); done \
+    < <(printf '%s\n' "${SESSIONS_FLAT[@]}" | sort -t'|' -k2)
+  SESSIONS_FLAT=("${_sorted[@]}")
+}
+
+# Sorts a _data_wins array in-place by window name via _win_meta.
+# Args: <server> <session> <nameref to array>
+_windows_sort_alpha() {
+  local _srv="$1" _sess="$2"
+  local -n _wref="$3"
+  [[ ${#_wref[@]} -le 1 ]] && return
+  local _named=() _dw _nm
+  for _dw in "${_wref[@]}"; do
+    _nm="${_win_meta["${_srv}|${_sess}|${_dw}"]%%|*}"
+    _named+=("${_nm}|${_dw}")
+  done
+  _wref=()
+  while IFS= read -r _line; do [[ -n "$_line" ]] && _wref+=("${_line#*|}"); done \
+    < <(printf '%s\n' "${_named[@]}" | sort -t'|' -k1)
+}
+
 # ── Differential rendering state ─────────────────────────────────────────────
 declare -a _DIFF_LINES=()
 _DIFF_W=0
@@ -78,6 +103,7 @@ render_help() {
   buf+=" ${GR}Other${R}"$'\n'
   buf+=" ${WH}i${R}    window info"$'\n'
   buf+=" ${WH}:${R}    command  ${GR}N / N.M${R}"$'\n'
+  buf+=" ${WH}a${R}    sort alpha/manual"$'\n'
   buf+=" ${WH}r${R}    rename"$'\n'
   buf+=" ${WH}R${R}    reload"$'\n'
   buf+=" ${WH}q${R}    quit"$'\n'
@@ -256,6 +282,7 @@ render() {
       SESSIONS_FLAT=("${_merged[@]}")
     fi
   fi
+  [[ "$SORT_MODE" == "alpha" ]] && _sessions_sort_alpha
 
   # ── Pre-leer DATA_FILE en arrays asociativos (bash 4) ────────────────────
   _win_keys=()
@@ -291,6 +318,7 @@ render() {
       [[ "$_wk_srv" == "$_srv" && "$_wk_sess" == "$_sess" ]] && _data_wins+=("$_wk_widx")
     done
     [[ ${#_data_wins[@]} -eq 0 ]] && continue
+    [[ "$SORT_MODE" == "alpha" ]] && _windows_sort_alpha "$_srv" "$_sess" _data_wins
 
     # Ventanas ya en ITEMS_FLAT (orden del usuario, puede diferir de DATA_FILE)
     local _old_wins=()
@@ -303,7 +331,7 @@ render() {
 
     # Si el conteo es igual: preservar orden existente; si cambió: merge
     local _wins=()
-    if [[ ${#_old_wins[@]} -eq ${#_data_wins[@]} && ${#_old_wins[@]} -gt 0 ]]; then
+    if [[ "$SORT_MODE" != "alpha" && ${#_old_wins[@]} -eq ${#_data_wins[@]} && ${#_old_wins[@]} -gt 0 ]]; then
       _wins=("${_old_wins[@]}")
     elif [[ ${#_old_wins[@]} -gt 0 ]]; then
       local _ow _dw _found
@@ -505,6 +533,7 @@ render() {
     if [[ -n "$_FILTER_STATUS" ]]; then
       buf+="${YL}  ⟨filter: ${_FILTER_STATUS}⟩${GR} [ESC]clear${R}"$'\n'; mapbuf+=$'\n'
     fi
+    [[ "$SORT_MODE" == "alpha" ]] && { buf+="${CY}  ⟨sort: α⟩${GR} [a]toggle${R}"$'\n'; mapbuf+=$'\n'; }
   fi
   buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
 

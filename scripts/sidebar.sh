@@ -107,6 +107,10 @@ PU=$'\033[1;35m'; GR=$'\033[90m'; RD=$'\033[31m'; YL=$'\033[1;33m'; CY=$'\033[1;
 _CURRENT_W=0
 _CURRENT_H=0
 
+# Read sort mode from outer tmux option (manual = user order, alpha = alphabetical)
+SORT_MODE=$("${OUTER_TMUX[@]}" show-option -gqv @agent-sidebar-sort 2>/dev/null)
+[[ "$SORT_MODE" != "alpha" ]] && SORT_MODE="manual"
+
 _SPIN_FRAME=0
 _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0
@@ -349,6 +353,7 @@ handle_key() {
 
     J)
       if [[ "$_cur_type" == "S" ]]; then
+        [[ "$SORT_MODE" == "alpha" ]] && return
         local _sf_idx=0 _k=0
         for _e in "${SESSIONS_FLAT[@]}"; do
           [[ "$_e" == "$_cur_rest" ]] && { _sf_idx=$_k; break; }; (( _k++ ))
@@ -360,6 +365,7 @@ handle_key() {
 
     K)
       if [[ "$_cur_type" == "S" ]]; then
+        [[ "$SORT_MODE" == "alpha" ]] && return
         local _sf_idx=0 _k=0
         for _e in "${SESSIONS_FLAT[@]}"; do
           [[ "$_e" == "$_cur_rest" ]] && { _sf_idx=$_k; break; }; (( _k++ ))
@@ -422,6 +428,10 @@ handle_key() {
 
     p)
       if [[ "$PREVIEW_MODE" == "0" ]]; then PREVIEW_MODE=1; else PREVIEW_MODE=0; fi ;;
+
+    a)
+      if [[ "$SORT_MODE" == "alpha" ]]; then SORT_MODE="manual"; else SORT_MODE="alpha"; fi
+      "${OUTER_TMUX[@]}" set-option -gq @agent-sidebar-sort "$SORT_MODE" 2>/dev/null || true ;;
 
     w) jump_next_working ;;
     u) jump_next_unread ;;
