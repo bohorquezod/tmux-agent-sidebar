@@ -116,7 +116,6 @@ _CURRENT_H=0
 SORT_MODE=$("${OUTER_TMUX[@]}" show-option -gqv @agent-sidebar-sort 2>/dev/null)
 [[ "$SORT_MODE" != "alpha" ]] && SORT_MODE="manual"
 
-
 _SPIN_FRAME=0
 _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0

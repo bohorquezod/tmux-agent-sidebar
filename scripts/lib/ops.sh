@@ -5,7 +5,7 @@
 
 # ── Reordenamiento de sesiones ────────────────────────────────────────────────
 save_session_order() {
-  : > "$ORDER_FILE"
+  : >"$ORDER_FILE"
   local _e
   for _e in "${SESSIONS_FLAT[@]}"; do printf '%s\n' "$_e" >>"$ORDER_FILE"; done
   touch "$DIRTY_FILE"

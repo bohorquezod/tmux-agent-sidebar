@@ -9,7 +9,12 @@ R=$'\033[0m'
 G=$'\033[32m'
 # shellcheck disable=SC2034  # BG used in render-row.sh
 BG=$'\033[1;32m'
-PU=$'\033[1;35m'; GR=$'\033[90m'; RD=$'\033[31m'; YL=$'\033[1;33m'; CY=$'\033[1;36m'; WH=$'\033[1;37m'
+PU=$'\033[1;35m'
+GR=$'\033[90m'
+RD=$'\033[31m'
+YL=$'\033[1;33m'
+CY=$'\033[1;36m'
+WH=$'\033[1;37m'
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
