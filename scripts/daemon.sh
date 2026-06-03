@@ -19,6 +19,7 @@ SUMMARY_FILE="${STATE_DIR}/summary"
 DIRTY_FILE="${STATE_DIR}/dirty"
 PID_FILE="${STATE_DIR}/daemon.pid"
 _BUILD_TMPDIR=""
+_DATA_TMP=""
 CLIENTS_DIR="${STATE_DIR}/clients"
 CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
@@ -40,6 +41,7 @@ _daemon_cleanup() {
   rm -f  "$PID_FILE"
   rm -rf "$LOCK_DIR"
   [[ -n "${_BUILD_TMPDIR:-}" ]] && rm -rf "$_BUILD_TMPDIR"
+  [[ -n "${_DATA_TMP:-}" ]]     && rm -f  "$_DATA_TMP"
 }
 
 _try_acquire_lock() {
@@ -268,8 +270,10 @@ build_data() {
 
   rm -rf "$_BUILD_TMPDIR"
   _BUILD_TMPDIR=""
-  printf '%s' "$_buf" > "${DATA_FILE}.tmp"
-  mv "${DATA_FILE}.tmp" "$DATA_FILE"
+  _DATA_TMP=$(mktemp "${DATA_FILE}.XXXXXX")
+  printf '%s' "$_buf" > "$_DATA_TMP"
+  mv "$_DATA_TMP" "$DATA_FILE"
+  _DATA_TMP=""
 }
 
 # ── Build summary token ───────────────────────────────────────────────────────
