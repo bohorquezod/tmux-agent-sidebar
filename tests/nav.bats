@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# nav.bats — tests for _resolve_ordinal
+# nav.bats — tests for _resolve_ordinal, jump_next_server, jump_prev_server
 
 load helpers/common
 
@@ -111,4 +111,96 @@ teardown() {
   touch "${STATE_DIR}/server1_session-a_0.unread"
   mark_all_read
   [ -f "${STATE_DIR}/server1_session-a_0.prev_icon" ]
+}
+
+# ── jump_next_server / jump_prev_server ───────────────────────────────────────
+# Multi-server fixture:
+#   idx 0  S|server1|session-a   ← server1 section start
+#   idx 1  W|server1|session-a|0
+#   idx 2  S|server1|session-b
+#   idx 3  W|server1|session-b|0
+#   idx 4  S|server2|session-c   ← server2 section start
+#   idx 5  W|server2|session-c|0
+#   idx 6  S|server2|session-d
+#   idx 7  S|server3|session-e   ← server3 section start
+
+setup_multi_server() {
+  ITEMS_FLAT=(
+    "S|server1|session-a"
+    "W|server1|session-a|0"
+    "S|server1|session-b"
+    "W|server1|session-b|0"
+    "S|server2|session-c"
+    "W|server2|session-c|0"
+    "S|server2|session-d"
+    "S|server3|session-e"
+  )
+}
+
+@test "jump_next_server: from server1 goes to server2 section start" {
+  setup_multi_server
+  SELECTED=0
+  jump_next_server
+  [ "$SELECTED" -eq 4 ]
+}
+
+@test "jump_next_server: from server2 goes to server3 section start" {
+  setup_multi_server
+  SELECTED=4
+  jump_next_server
+  [ "$SELECTED" -eq 7 ]
+}
+
+@test "jump_next_server: from server3 wraps to server1" {
+  setup_multi_server
+  SELECTED=7
+  jump_next_server
+  [ "$SELECTED" -eq 0 ]
+}
+
+@test "jump_next_server: from window inside server1 goes to server2" {
+  setup_multi_server
+  SELECTED=1
+  jump_next_server
+  [ "$SELECTED" -eq 4 ]
+}
+
+@test "jump_next_server: single server does nothing" {
+  SELECTED=2
+  jump_next_server
+  [ "$SELECTED" -eq 2 ]
+}
+
+@test "jump_prev_server: from server2 goes to server1 section start" {
+  setup_multi_server
+  SELECTED=4
+  jump_prev_server
+  [ "$SELECTED" -eq 0 ]
+}
+
+@test "jump_prev_server: from server3 goes to server2 section start" {
+  setup_multi_server
+  SELECTED=7
+  jump_prev_server
+  [ "$SELECTED" -eq 4 ]
+}
+
+@test "jump_prev_server: from server1 wraps to server3" {
+  setup_multi_server
+  SELECTED=0
+  jump_prev_server
+  [ "$SELECTED" -eq 7 ]
+}
+
+@test "jump_prev_server: from window inside server2 goes to server1" {
+  setup_multi_server
+  SELECTED=5
+  jump_prev_server
+  [ "$SELECTED" -eq 0 ]
+}
+
+@test "jump_prev_server: single server does nothing" {
+  SELECTED=2
+  jump_prev_server
+  [ "$SELECTED" -eq 2 ]
 }
