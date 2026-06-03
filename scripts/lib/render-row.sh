@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2154  # globals set by render() in render.sh before each call
 # render-row.sh — per-row render helpers (session and window rows)
 # Sourced by sidebar.sh. No shebang — not executed directly.
 # Requires: render-icons.sh sourced first, all sidebar globals.

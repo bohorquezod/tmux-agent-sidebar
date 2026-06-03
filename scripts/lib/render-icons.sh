@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # render-icons.sh — icon/spinner pure-mapping functions
 # Sourced by sidebar.sh. No shebang — not executed directly.
 # Requires: _SPINNER array, R GR CY RD YL color globals.
