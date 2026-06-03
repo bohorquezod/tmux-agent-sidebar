@@ -1,0 +1,51 @@
+scripts/lib/ops.sh
+  ai_agent 168
+scripts/lib/nav.sh
+  ai_agent 32,90-94
+scripts/server-start.sh
+  ai_agent 59-66
+tests/e2e-states.sh
+  ai_agent 1-432
+scripts/daemon.sh
+  ai_agent 21-22,30,32-33,40-46,68,83,87,108,135,197,211,215,230,252-263,265,271-272,357
+tests/mark-unread.bats
+  ai_agent 1-70
+tests/nav.bats
+  ai_agent 91-114
+tests/ops.bats
+  ai_agent 1-109
+tmux-agent-sidebar.tmux
+  ai_agent 54
+scripts/lib/log.sh
+  ai_agent 1-27
+scripts/lib/render-icons.sh
+  ai_agent 1-44
+scripts/popup.sh
+  ai_agent 9-22,25
+tests/helpers/common.bash
+  ai_agent 24,27-28
+scripts/lib/sidebar-utils.sh
+  ai_agent 17,32,48,61,82
+scripts/lib/states.sh
+  ai_agent 1-10
+scripts/sidebar.sh
+  ai_agent 13,57-58,63-64,107-109,124-130,195-200,258-288,294-296,301-307,409,428-436,458-460,462-487
+tests/popup.bats
+  ai_agent 1-56
+scripts/lib/detect.sh
+  ai_agent 2,5,8,10,15,17,21,29-30,34-46,48,60,62,67,72,76,79,82,84,86,88,90,92,94-96,134,137-139,165-167
+tests/detect.bats
+  ai_agent 16,18,21,23,26,28,31,36,39,43,46,50,53,57,60,64,67-87,95,98,100,103,106,109,111,114,117,120,124,127,131,134,136,141,149,151,155,165,174,182,192,194,198,207,210
+CLAUDE.md
+  ai_agent 30-32
+scripts/lib/render.sh
+  ai_agent 1-3,7-49,71-72,79,81-82,88-150,157,171,173,186-188,193-194,206,232-257,265,270,300,357,367-372,374,448,453,465,473,518,520,523,526,535-536,544,549,557,560,569,571,573,576-577,583,631
+scripts/lib/render-row.sh
+  ai_agent 1-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a70e3f52ed4df0103b06af346f279cd8edb8717e",
+  "prompts": {}
+}
