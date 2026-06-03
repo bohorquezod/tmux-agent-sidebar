@@ -3,7 +3,8 @@ set -euo pipefail
 # click.sh — navega al target y abre/refresca el sidebar en destino
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+TMUXBIN="$(command -v tmux 2>/dev/null)"
+[[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 MAPFILE_PATH="${STATE_DIR}/rowmap"
 CLIENTS_DIR="${STATE_DIR}/clients"
@@ -12,31 +13,34 @@ SESSION="sidebar"
 
 [[ -f "$MAPFILE_PATH" ]] || exit 0
 
-ROW=$(( $1 + 1 ))
+ROW=$(($1 + 1))
 TARGET=$(sed -n "${ROW}p" "$MAPFILE_PATH" 2>/dev/null)
 [[ -z "$TARGET" ]] && exit 0
 
 # Parsear target: "server|session" o "server|session|winidx"
-TARGET_SRV="${TARGET%%|*}"; _rest="${TARGET#*|}"
-TARGET_SESS="${_rest%%|*}"; TARGET_WIN="${_rest#*|}"
+TARGET_SRV="${TARGET%%|*}"
+_rest="${TARGET#*|}"
+TARGET_SESS="${_rest%%|*}"
+TARGET_WIN="${_rest#*|}"
 [[ "$TARGET_WIN" == "$TARGET_SESS" ]] && TARGET_WIN=""
 
 # Click en sesión sin ventana: no navegar (solo las ventanas redirigen)
 [[ -z "$TARGET_WIN" ]] && exit 0
 
-CURRENT_SERVER="${TMUX%%,*}"; CURRENT_SERVER="${CURRENT_SERVER##*/}"
+CURRENT_SERVER="${TMUX%%,*}"
+CURRENT_SERVER="${CURRENT_SERVER##*/}"
 SOCKET_DIR="${TMPDIR:-/tmp}/tmux-$(id -u)"
 
 # Capturar el ancho del sidebar en la ventana origen antes de navegar
 _src_sess=$($TMUXBIN display-message -p '#S' 2>/dev/null)
-_src_win=$($TMUXBIN display-message  -p '#I' 2>/dev/null)
+_src_win=$($TMUXBIN display-message -p '#I' 2>/dev/null)
 _src_w=$($TMUXBIN list-panes -t "${_src_sess}:${_src_win}" \
   -F '#{pane_dead}|#{pane_title}|#{pane_width}' 2>/dev/null \
   | awk -F'|' '$1!="1" && $2=="Sessions" {print $3; exit}')
 _srv_key="${CURRENT_SERVER//[^a-zA-Z0-9_-]/_}"
 _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
 [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
-[[ -n "$_src_w" ]] && printf '%s' "$_src_w" > "$_width_f"
+[[ -n "$_src_w" ]] && printf '%s' "$_src_w" >"$_width_f"
 
 _tmux_target="$TARGET_SESS"
 [[ -n "$TARGET_WIN" ]] && _tmux_target="${TARGET_SESS}:${TARGET_WIN}"
@@ -57,7 +61,7 @@ fi
 
 # Escribir current_session directamente para re-render inmediato del sidebar.
 # No esperar al hook client-session-changed (que no dispara cuando solo cambia la ventana).
-[[ -n "$TARGET_SESS" ]] && printf '%s' "$TARGET_SESS" > "${STATE_DIR}/current_session"
+[[ -n "$TARGET_SESS" ]] && printf '%s' "$TARGET_SESS" >"${STATE_DIR}/current_session"
 
 # Despertar el read -n1 de sidebar.sh enviando un carácter invisible directo al pane.
 # send-keys garantiza retorno inmediato del read (las señales no interrumpen ptys en macOS).
@@ -77,7 +81,7 @@ else
 fi
 
 # Handoff de just_visited para limpiar flag de unread (formato srv|sess:win)
-printf '%s' "${TARGET_SRV}|${DEST_SESS}:${DEST_WIN}" > "${STATE_DIR}/just_visited"
+printf '%s' "${TARGET_SRV}|${DEST_SESS}:${DEST_WIN}" >"${STATE_DIR}/just_visited"
 
 # Detectar sidebar en destino por título
 LIVE_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
@@ -131,7 +135,7 @@ _dedup_sessions_panes() {
     | awk -F'|' -v keep="$_keep" '$2=="Sessions" && $1!=keep {print $1}')
   while IFS= read -r _dup; do
     [[ -n "$_dup" ]] && $TMUXBIN kill-pane -t "$_dup" 2>/dev/null
-  done <<< "$_extras"
+  done <<<"$_extras"
 }
 
 if [[ -n "$DEAD_PANE" ]]; then

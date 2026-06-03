@@ -3,12 +3,14 @@ set -euo pipefail
 # toggle.sh — abre/cierra el sidebar conectando al sidebar server tmux-agent-sidebar
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+TMUXBIN="$(command -v tmux 2>/dev/null)"
+[[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 SERVER="tmux-agent-sidebar"
 SESSION="sidebar"
 
-OUTER_SERVER="${TMUX%%,*}"; OUTER_SERVER="${OUTER_SERVER##*/}"
+OUTER_SERVER="${TMUX%%,*}"
+OUTER_SERVER="${OUTER_SERVER##*/}"
 
 SESS=$($TMUXBIN display-message -p '#S')
 WIN_IDX=$($TMUXBIN display-message -p '#I')
