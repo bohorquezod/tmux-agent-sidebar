@@ -406,7 +406,7 @@ handle_key() {
       elif [[ "$_cur_type" == "W" ]]; then
         local _srv="${_cur_rest%%|*}" _wr="${_cur_rest#*|}"
         local _sess="${_wr%%|*}" _win="${_wr#*|}"
-        [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_win}"
+        [[ "$_srv" == "$OUTER_SERVER" && -z "$POPUP_MODE" ]] && _ensure_sidebar "${_sess}:${_win}"
         jump_to "${_srv}|${_sess}|${_win}"
         [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" > "${STATE_DIR}/current_session"
         printf '%s' "${_srv}|${_sess}:${_win}" > "${STATE_DIR}/just_visited"
