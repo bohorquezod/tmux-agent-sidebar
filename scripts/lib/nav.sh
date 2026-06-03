@@ -36,7 +36,7 @@ jump_next_working() {
     _widx="${_wrest#*|}"
     _icon=$(awk -F'|' -v s="$_srv" -v e="$_sess" -v w="$_widx" \
       '$1=="W"&&$2==s&&$3==e&&$4==w{print $6;exit}' "$DATA_FILE" 2>/dev/null)
-    if [[ "$_icon" == "W" || "$_icon" == "L" ]]; then
+    if [[ "$_icon" == "$STATE_WORKING" || "$_icon" == "$STATE_LOOP" ]]; then
       SELECTED=$_i
       [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_widx}"
       jump_to "${_srv}|${_sess}|${_widx}"
@@ -118,3 +118,8 @@ _resolve_ordinal() {
   return 0
 }
 _ri_ci="" _ri_ct="" _ri_cr=""
+
+# ── Mark all windows as read ──────────────────────────────────────────────────
+mark_all_read() {
+  rm -f "${STATE_DIR}"/*.unread
+}

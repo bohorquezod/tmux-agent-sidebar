@@ -180,7 +180,7 @@ _apply_rename() {
         SESSIONS_FLAT[$_si2]="${_srv}|${_RENAME_BUF}"
         break
       }
-      ((_si2++))
+      ((++_si2))
     done
     # Propagar a current_session si era la sesión activa
     local _cs

@@ -19,6 +19,8 @@ DATA_FILE="${STATE_DIR}/data"
 SUMMARY_FILE="${STATE_DIR}/summary"
 DIRTY_FILE="${STATE_DIR}/dirty"
 PID_FILE="${STATE_DIR}/daemon.pid"
+_BUILD_TMPDIR=""
+_DATA_TMP=""
 CLIENTS_DIR="${STATE_DIR}/clients"
 CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
@@ -26,13 +28,22 @@ CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR" "$CAPTURES_DIR"
 
-# Source detection library (defines detect_icon, effective_claude_pid, agent_sigla, check_loop)
+# Source libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/log.sh"
+source "${SCRIPT_DIR}/lib/states.sh"
 source "${SCRIPT_DIR}/lib/detect.sh"
 
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
 LOCK_DIR="${STATE_DIR}/daemon.lock"
 _LOCK_PID_FILE="${LOCK_DIR}/pid"
+
+_daemon_cleanup() {
+  rm -f "$PID_FILE"
+  rm -rf "$LOCK_DIR"
+  [[ -n "${_BUILD_TMPDIR:-}" ]] && rm -rf "$_BUILD_TMPDIR"
+  [[ -n "${_DATA_TMP:-}" ]] && rm -f "$_DATA_TMP"
+}
 
 _try_acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -56,7 +67,7 @@ _try_acquire_lock() {
 if ! _try_acquire_lock; then
   exit 0
 fi
-trap 'rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"' EXIT INT TERM
+trap '_daemon_cleanup' EXIT INT TERM
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,11 +83,11 @@ current_server_name() {
 #   W|server|session|win_idx|win_name|icon|agent_sigla|is_last(0/1)
 
 build_data() {
-  local _current _socket_dir _buf _tmpdir _servers
+  local _current _socket_dir _buf _servers
   _current=$(current_server_name)
   _socket_dir="${TMPDIR:-/tmp}/tmux-$(id -u)"
   _buf=""
-  _tmpdir=$(mktemp -d)
+  _BUILD_TMPDIR=$(mktemp -d)
   _servers=("$_current")
 
   if [[ -d "$_socket_dir" ]]; then
@@ -98,6 +109,7 @@ build_data() {
 
     local _SESS _WINS _PANES
     _SESS=$($TMUXBIN "${_sargs[@]}" list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null) || continue
+    _log_debug "build_data: server=$_server sessions=$(printf '%s\n' "$_SESS" | grep -c '.' 2>/dev/null || echo 0)"
     _WINS=$($TMUXBIN "${_sargs[@]}" list-windows -a -F '#{session_name}|#{window_index}|#{window_name}' 2>/dev/null)
     # Formato: pane_id|pane_pid|pane_dead|session|window|cmd|title
     _PANES=$($TMUXBIN "${_sargs[@]}" list-panes -a \
@@ -127,7 +139,7 @@ build_data() {
       fi
       # Capturar contenido para detección de P y fallback
       $TMUXBIN "${_sargs[@]}" capture-pane -t "$_paneid" -p \
-        >"$_tmpdir/${_server}_${_paneid//[^a-zA-Z0-9]/_}" 2>/dev/null &
+        >"$_BUILD_TMPDIR/${_server}_${_paneid//[^a-zA-Z0-9]/_}" 2>/dev/null &
     done <<<"$_PANES"
     wait
 
@@ -204,7 +216,7 @@ build_data() {
         done <<<"$_PANES"
 
         local _lines="" _ck="${_capid//[^a-zA-Z0-9]/_}"
-        [[ -n "$_capid" && -f "$_tmpdir/${_server}_${_ck}" ]] && _lines=$(<"$_tmpdir/${_server}_${_ck}")
+        [[ -n "$_capid" && -f "$_BUILD_TMPDIR/${_server}_${_ck}" ]] && _lines=$(<"$_BUILD_TMPDIR/${_server}_${_ck}")
 
         local _cap_key="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         printf '%s' "$_lines" >"${CAPTURES_DIR}/${_cap_key}"
@@ -220,11 +232,11 @@ build_data() {
         local _wkey="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
 
         # Loop detection
-        check_loop "$_wkey" "$_icon" && _icon="L"
+        check_loop "$_wkey" "$_icon" && _icon="$STATE_LOOP"
 
         # Crashed detection (shell volvió pero Claude murió mientras estaba busy)
         # Guardamos el último PID conocido de Claude por ventana
-        if [[ "$_icon" == "E" ]]; then
+        if [[ "$_icon" == "$STATE_EMPTY" ]]; then
           local _cpid_f="${STATE_DIR}/${_wkey}.last_cpid"
           if [[ -f "$_cpid_f" ]]; then
             local _last_cpid
@@ -243,7 +255,7 @@ build_data() {
                   local _now
                   _now=$(date +%s)
                   if ((_now - _xct < 120)); then
-                    _icon="X"
+                    _icon="$STATE_CRASHED"
                   else
                     rm -f "$_cpid_f" "$_xcf"
                   fi
@@ -266,17 +278,32 @@ build_data() {
         local _sigla=""
         _sigla=$(agent_sigla "$_eff_pid")
 
+        # Título del pane — quitar indicador de estado inicial (✳ o Braille) y pipes
+        local _ptitle="${_captitle}"
+        _ptitle="${_ptitle#✳ }"
+        _ptitle=$(printf '%s' "$_ptitle" | LC_ALL=C sed 's/^[[:space:]]*//; s/|//g')
+        # Quitar indicador de estado al inicio: ✳ (idle) o spinner Braille (working)
+        _ptitle="${_ptitle#✳ }"
+        # Braille u otro multi-byte + espacio: si el 1er char pesa >1 byte y el 2do es espacio
+        if [[ "${_ptitle:1:1}" == " " ]] \
+          && [[ "$(printf '%s' "${_ptitle:0:1}" | wc -c | tr -d '[:space:]')" -gt 1 ]]; then
+          _ptitle="${_ptitle:2}"
+        fi
+
         local _islast=0
         ((_wj + 1 >= _wtotal)) && _islast=1
-        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}"$'\n'
+        _buf+="W|${_server}|${_sess}|${_widx}|${_wname}|${_icon}|${_sigla}|${_islast}|${_ptitle}"$'\n'
         ((_wj++))
       done
     done
   done
 
-  rm -rf "$_tmpdir"
-  printf '%s' "$_buf" >"${DATA_FILE}.tmp"
-  mv "${DATA_FILE}.tmp" "$DATA_FILE"
+  rm -rf "$_BUILD_TMPDIR"
+  _BUILD_TMPDIR=""
+  _DATA_TMP=$(mktemp "${DATA_FILE}.XXXXXX")
+  printf '%s' "$_buf" >"$_DATA_TMP"
+  mv "$_DATA_TMP" "$DATA_FILE"
+  _DATA_TMP=""
 }
 
 # ── Build summary token ───────────────────────────────────────────────────────
@@ -360,6 +387,7 @@ while true; do
   fi
 
   if [[ "$_SB" == true ]]; then
+    _log_rotate
     build_data
     build_summary
     LAST_BUILD=$SECONDS

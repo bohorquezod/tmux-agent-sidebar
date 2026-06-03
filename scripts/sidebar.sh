@@ -10,7 +10,7 @@ fi
 
 # Deshabilitar echo y asegurar que \n produzca \r\n (ONLCR) en la pty.
 stty -echo onlcr 2>/dev/null
-printf '\033[?7l' # deshabilitar auto-wrap
+printf '\033[?7l\033[?25l' # deshabilitar auto-wrap y ocultar cursor
 shopt -s checkwinsize 2>/dev/null
 
 PLUGIN_DIR="${PLUGIN_DIR:-$(cd -P "$(dirname "$0")/.." && pwd)}"
@@ -56,10 +56,14 @@ printf '%s' "$PANE_ID" >"$STATE_FILE"
 
 # Source all lib modules (defines render, nav, ops, cmd, sidebar-utils functions)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/log.sh"
+source "${SCRIPT_DIR}/lib/states.sh"
 source "${SCRIPT_DIR}/lib/sidebar-utils.sh"
 source "${SCRIPT_DIR}/lib/nav.sh"
 source "${SCRIPT_DIR}/lib/ops.sh"
 source "${SCRIPT_DIR}/lib/cmd.sh"
+source "${SCRIPT_DIR}/lib/render-icons.sh"
+source "${SCRIPT_DIR}/lib/render-row.sh"
 source "${SCRIPT_DIR}/lib/render.sh"
 
 _RELOADING=0
@@ -113,6 +117,13 @@ YL=$'\033[1;33m'
 CY=$'\033[1;36m'
 WH=$'\033[1;37m'
 
+_CURRENT_W=0
+_CURRENT_H=0
+
+# Read sort mode from outer tmux option (manual = user order, alpha = alphabetical)
+SORT_MODE=$("${OUTER_TMUX[@]}" show-option -gqv @agent-sidebar-sort 2>/dev/null)
+[[ "$SORT_MODE" != "alpha" ]] && SORT_MODE="manual"
+
 _SPIN_FRAME=0
 _SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 _HAS_WORKING=0
@@ -127,6 +138,13 @@ _RENAME_BUF=""
 _RENAME_TYPE=""
 _FILTER_STATUS=""
 _HELP_MODE=0
+_INFO_MODE=0
+_INFO_WNAME=""
+_INFO_STATUS=""
+_INFO_AGENT=""
+_INFO_BRANCH=""
+_INFO_PROJECT=""
+_INFO_PR_URL=""
 
 # Data arrays — global cache repopulado solo cuando DATA_FILE cambia
 # bash 4: associative arrays replace parallel indexed arrays
@@ -201,6 +219,13 @@ handle_key() {
   if [[ "$_HELP_MODE" -eq 1 ]]; then
     [[ "$key" == $'\x1e' ]] && return
     _HELP_MODE=0
+    return
+  fi
+
+  # ── Info overlay activo: i o Esc lo descarta ─────────────────────────────
+  if [[ "$_INFO_MODE" -eq 1 ]]; then
+    [[ "$key" == $'\x1e' ]] && return
+    _INFO_MODE=0
     return
   fi
 
@@ -283,6 +308,41 @@ handle_key() {
 
     "?") _HELP_MODE=1 ;;
 
+    i)
+      if [[ "$_cur_type" == "W" ]]; then
+        local _isrv="${_cur_rest%%|*}" _iwr="${_cur_rest#*|}"
+        local _isess="${_iwr%%|*}" _iwidx="${_iwr#*|}"
+        local _iwmeta="${_win_meta["${_isrv}|${_isess}|${_iwidx}"]:-}"
+        local _idummy
+        IFS='|' read -r _INFO_WNAME _INFO_STATUS _INFO_AGENT _idummy <<<"$_iwmeta"
+
+        local _iwkey="${_isrv//[^a-zA-Z0-9_-]/_}_${_isess//[^a-zA-Z0-9_-]/_}_${_iwidx}"
+        local _icpid=""
+        [[ -f "${STATE_DIR}/${_iwkey}.last_cpid" ]] && _icpid=$(<"${STATE_DIR}/${_iwkey}.last_cpid")
+
+        _INFO_BRANCH=""
+        _INFO_PROJECT=""
+        _INFO_PR_URL=""
+        local _icwd=""
+        if [[ -n "$_icpid" ]]; then
+          local _isf="${HOME}/.claude/sessions/${_icpid}.json"
+          [[ -f "$_isf" ]] && _icwd=$(grep -o '"cwd":"[^"]*"' "$_isf" | cut -d'"' -f4 2>/dev/null)
+        fi
+        [[ -z "$_icwd" ]] && _icwd=$("${OUTER_TMUX[@]}" display-message -t "${_isess}:${_iwidx}" -p '#{pane_current_path}' 2>/dev/null)
+
+        if [[ -n "$_icwd" ]]; then
+          _INFO_BRANCH=$(git -C "$_icwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
+          local _igitroot
+          _igitroot=$(git -C "$_icwd" rev-parse --show-toplevel 2>/dev/null)
+          [[ -n "$_igitroot" ]] && _INFO_PROJECT=$(basename "$_igitroot") \
+            || _INFO_PROJECT=$(basename "$_icwd")
+          _INFO_PR_URL=$(cd "$_icwd" && gh pr view --json url --jq '.url' 2>/dev/null)
+        fi
+
+        _INFO_MODE=1
+      fi
+      ;;
+
     ":") _CMD_BUF=":" ;;
     "/")
       _SEARCH_MODE=1
@@ -293,12 +353,20 @@ handle_key() {
     [0-9]) _CMD_BUF="$key" ;;
 
     R)
+      # Nuclear reload: equivalente a prefix+M pero sin matar el pane del sidebar.
+      # El servidor tmux-agent-sidebar y la sesión se preservan; solo se reinicia
+      # sidebar.sh (exec $0) con estado limpio y daemon fresco.
       kill "$_ANIMATOR_PID" 2>/dev/null
       rm -f "${STATE_DIR}/animator_active"
       ps aux 2>/dev/null | grep "[d]aemon.sh" | grep -v grep | awk '{print $2}' \
         | xargs kill -9 2>/dev/null
       rm -f "${STATE_DIR}/daemon.pid"
       rm -rf "${STATE_DIR}/daemon.lock"
+      rm -f "${STATE_DIR}/data"
+      rm -f "${STATE_DIR}/rowmap"
+      rm -f "${STATE_DIR}/clients/"*
+      "${OUTER_TMUX[@]}" set-option -gu @claude_sidebar_hooks 2>/dev/null
+      "${OUTER_TMUX[@]}" run-shell "bash \"$PLUGIN_DIR/tmux-agent-sidebar.tmux\"" 2>/dev/null
       _RELOADING=1
       exec "$0"
       ;;
@@ -359,6 +427,7 @@ handle_key() {
 
     J)
       if [[ "$_cur_type" == "S" ]]; then
+        [[ "$SORT_MODE" == "alpha" ]] && return
         local _sf_idx=0 _k=0
         for _e in "${SESSIONS_FLAT[@]}"; do
           [[ "$_e" == "$_cur_rest" ]] && {
@@ -376,6 +445,7 @@ handle_key() {
 
     K)
       if [[ "$_cur_type" == "S" ]]; then
+        [[ "$SORT_MODE" == "alpha" ]] && return
         local _sf_idx=0 _k=0
         for _e in "${SESSIONS_FLAT[@]}"; do
           [[ "$_e" == "$_cur_rest" ]] && {
@@ -438,7 +508,7 @@ handle_key() {
       elif [[ "$_cur_type" == "W" ]]; then
         local _srv="${_cur_rest%%|*}" _wr="${_cur_rest#*|}"
         local _sess="${_wr%%|*}" _win="${_wr#*|}"
-        [[ "$_srv" == "$OUTER_SERVER" ]] && _ensure_sidebar "${_sess}:${_win}"
+        [[ "$_srv" == "$OUTER_SERVER" && -z "$POPUP_MODE" ]] && _ensure_sidebar "${_sess}:${_win}"
         jump_to "${_srv}|${_sess}|${_win}"
         [[ "$_srv" == "$OUTER_SERVER" ]] && printf '%s' "$_sess" >"${STATE_DIR}/current_session"
         printf '%s' "${_srv}|${_sess}:${_win}" >"${STATE_DIR}/just_visited"
@@ -459,8 +529,23 @@ handle_key() {
       if [[ "$PREVIEW_MODE" == "0" ]]; then PREVIEW_MODE=1; else PREVIEW_MODE=0; fi
       ;;
 
+    a)
+      if [[ "$SORT_MODE" == "alpha" ]]; then SORT_MODE="manual"; else SORT_MODE="alpha"; fi
+      "${OUTER_TMUX[@]}" set-option -gq @agent-sidebar-sort "$SORT_MODE" 2>/dev/null || true
+      ;;
+
     w) jump_next_working ;;
     u) jump_next_unread ;;
+    U) mark_all_read ;;
+
+    m)
+      if [[ "$_cur_type" == "W" ]]; then
+        local _msrv="${_cur_rest%%|*}" _mwr="${_cur_rest#*|}"
+        local _msess="${_mwr%%|*}" _mwidx="${_mwr#*|}"
+        local _mkey="${_msrv//[^a-zA-Z0-9_-]/_}_${_msess//[^a-zA-Z0-9_-]/_}_${_mwidx}"
+        touch "${STATE_DIR}/${_mkey}.unread"
+      fi
+      ;;
 
     q | Q)
       if [[ -n "$POPUP_MODE" ]]; then
@@ -484,12 +569,41 @@ DATA_MTIME=$(file_mtime "$DATA_FILE")
 SESS_MTIME=$(file_mtime "${STATE_DIR}/current_session")
 LAST_SZ=$(stty size 2>/dev/null)
 while true; do
+  # Heartbeat: re-registrar en clients/ por si el directorio fue limpiado
+  printf '%d' "$$" >"$CLIENTS_DIR/$CLIENT_KEY" 2>/dev/null || true
+
   _cur_sz=$(stty size 2>/dev/null)
-  [[ "$_cur_sz" != "$LAST_SZ" ]] && {
+  if [[ "$_cur_sz" != "$LAST_SZ" ]]; then
     LAST_SZ="$_cur_sz"
     _WINCH=1
     _RESIZE=1
-  }
+    _CURRENT_W="${_cur_sz##* }"
+    _CURRENT_H="${_cur_sz%% *}"
+  fi
+
+  # Con window-size manual, stty puede estar desactualizado mientras el hook after-resize-pane
+  # aún no completó su resize-window. Consultamos el pane externo directamente y, si hay
+  # mismatch, llamamos resize-window de forma síncrona y actualizamos _CURRENT_W/_CURRENT_H
+  # antes de que render() los use. Sin flags, sin continue: render ocurre normalmente pero con
+  # los valores correctos.
+  if [[ -n "$OUTER_TMUX_SOCKET" ]]; then
+    _opw=$("${OUTER_TMUX[@]}" list-panes -a \
+      -F '#{pane_title}|#{pane_width}|#{pane_height}' 2>/dev/null \
+      | awk -F'|' '$1=="Sessions"{print $2"|"$3; exit}')
+    if [[ -n "$_opw" ]]; then
+      _opw_x="${_opw%%|*}"
+      _opw_y="${_opw##*|}"
+      if [[ "$_opw_x" =~ ^[0-9]+$ && "$_opw_y" =~ ^[0-9]+$ &&
+        ("$_opw_x" != "$_CURRENT_W" || "$_opw_y" != "$_CURRENT_H") ]]; then
+        "$TMUXBIN" -L "tmux-agent-sidebar" resize-window -t sidebar \
+          -x "$_opw_x" -y "$_opw_y" 2>/dev/null
+        _CURRENT_W="$_opw_x"
+        _CURRENT_H="$_opw_y"
+        _DIFF_LINES=()
+        _WINCH=1
+      fi
+    fi
+  fi
 
   _cur_mtime=$(file_mtime "$DATA_FILE")
   _cur_sess_mtime=$(file_mtime "${STATE_DIR}/current_session")
