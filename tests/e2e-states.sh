@@ -373,9 +373,20 @@ else
   PROMPT_X="${E2E_PROMPT_X:-"Read $REPO_ROOT/scripts/daemon.sh then read $REPO_ROOT/scripts/sidebar.sh and compare them, listing every function that exists in one but not the other."}"
 
   info "Enviando prompt para tener Claude en $STATE_WORKING..."
-  # Matar claude previo si quedó idle
-  send "" C-c
+  # Matar cualquier claude que haya quedado activo en el pane
+  # C-c deja a Claude en idle interactivo (TUI), no lo mata — hay que kill directo
+  _PANE_PID_PRE=$($TMUXBIN display-message -t "${TEST_SESSION}:${WIN_IDX}" -p '#{pane_pid}' 2>/dev/null)
+  for _cp in $(pgrep -P "$_PANE_PID_PRE" 2>/dev/null); do
+    [[ -f "${HOME}/.claude/sessions/${_cp}.json" ]] && kill -9 "$_cp" 2>/dev/null && \
+      info "Kill -9 de claude previo (PID $_cp)" || true
+  done
   sleep 0.5
+  # Limpiar archivos de estado del daemon para evitar contaminación entre tests
+  _WKEY="${SERVER//[^a-zA-Z0-9_-]/_}_${TEST_SESSION//[^a-zA-Z0-9_-]/_}_${WIN_IDX}"
+  rm -f "${STATE_DIR}/${_WKEY}.xctime" "${STATE_DIR}/${_WKEY}.last_cpid"
+  # Esperar a que el daemon confirme empty (pane vuelto a shell)
+  wait_for_icon "$SERVER" "$TEST_SESSION" "$WIN_IDX" "$STATE_EMPTY" 10 >/dev/null || \
+    { info "Advertencia: pane no volvió a empty antes del timeout"; true; }
 
   send "claude \"$PROMPT_X\""
 

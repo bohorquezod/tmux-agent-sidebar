@@ -622,7 +622,7 @@ while true; do
       || rm -f "${STATE_DIR}/animator_active"
   fi
 
-  if IFS= read -r -s -n1 -t 1 key 2>/dev/null; then
+  if IFS= read -r -s -n1 -t 0.3 key 2>/dev/null; then
     handle_key "$key"
     _HAS_WORKING=0
     render
