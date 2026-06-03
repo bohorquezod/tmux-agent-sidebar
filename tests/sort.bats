@@ -59,9 +59,9 @@ teardown() {
 # ── _windows_sort_alpha ───────────────────────────────────────────────────────
 
 @test "_windows_sort_alpha: sorts windows alphabetically by name" {
-  _win_meta["srv|sess|2"]="zebra|I||1"
-  _win_meta["srv|sess|0"]="alpha|I||0"
-  _win_meta["srv|sess|1"]="mango|I||0"
+  _win_meta["srv|sess|2"]="zebra|idle||1"
+  _win_meta["srv|sess|0"]="alpha|idle||0"
+  _win_meta["srv|sess|1"]="mango|idle||0"
   local _wins=(2 0 1)
   _windows_sort_alpha "srv" "sess" _wins
   [ "${_wins[0]}" = "0" ]
@@ -70,8 +70,8 @@ teardown() {
 }
 
 @test "_windows_sort_alpha: already sorted stays sorted" {
-  _win_meta["srv|sess|0"]="aaa|I||0"
-  _win_meta["srv|sess|1"]="bbb|I||1"
+  _win_meta["srv|sess|0"]="aaa|idle||0"
+  _win_meta["srv|sess|1"]="bbb|idle||1"
   local _wins=(0 1)
   _windows_sort_alpha "srv" "sess" _wins
   [ "${_wins[0]}" = "0" ]
@@ -79,7 +79,7 @@ teardown() {
 }
 
 @test "_windows_sort_alpha: single window is a no-op" {
-  _win_meta["srv|sess|0"]="only|I||1"
+  _win_meta["srv|sess|0"]="only|idle||1"
   local _wins=(0)
   _windows_sort_alpha "srv" "sess" _wins
   [ "${#_wins[@]}" = "1" ]
@@ -88,7 +88,7 @@ teardown() {
 
 @test "_windows_sort_alpha: windows with missing meta keep their index" {
   # Missing meta → name resolves to empty string → sorts first
-  _win_meta["srv|sess|1"]="beta|I||1"
+  _win_meta["srv|sess|1"]="beta|idle||1"
   local _wins=(1 0)
   _windows_sort_alpha "srv" "sess" _wins
   # empty name sorts before "beta"

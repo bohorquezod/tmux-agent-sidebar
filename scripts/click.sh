@@ -49,14 +49,14 @@ _tmux_target="$TARGET_SESS"
 if [[ -n "$TARGET_WIN" && "$TARGET_SRV" == "$CURRENT_SERVER" && -n "$_src_w" ]]; then
   _dest_live=$($TMUXBIN list-panes -t "${TARGET_SESS}:${TARGET_WIN}" \
     -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-    | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}')
-  [[ -n "$_dest_live" ]] && $TMUXBIN resize-pane -t "$_dest_live" -x "$_src_w" 2>/dev/null
+    | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}') || true
+  [[ -n "$_dest_live" ]] && $TMUXBIN resize-pane -t "$_dest_live" -x "$_src_w" 2>/dev/null || true
 fi
 
 if [[ "$TARGET_SRV" == "$CURRENT_SERVER" ]]; then
-  $TMUXBIN switch-client -t "$_tmux_target" 2>/dev/null
+  $TMUXBIN switch-client -t "$_tmux_target" 2>/dev/null || exit 0
 else
-  $TMUXBIN -S "$SOCKET_DIR/$TARGET_SRV" switch-client -t "$_tmux_target" 2>/dev/null
+  $TMUXBIN -S "$SOCKET_DIR/$TARGET_SRV" switch-client -t "$_tmux_target" 2>/dev/null || exit 0
 fi
 
 # Escribir current_session directamente para re-render inmediato del sidebar.
@@ -86,11 +86,11 @@ printf '%s' "${TARGET_SRV}|${DEST_SESS}:${DEST_WIN}" >"${STATE_DIR}/just_visited
 # Detectar sidebar en destino por título
 LIVE_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
   -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-  | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}')
+  | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}') || true
 
 DEAD_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
   -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-  | awk -F'|' '$1=="1" && $3=="Sessions" {print $2; exit}')
+  | awk -F'|' '$1=="1" && $3=="Sessions" {print $2; exit}') || true
 
 # Verificar que LIVE_PANE tiene el sidebar server activo y sidebar.sh corriendo
 if [[ -n "$LIVE_PANE" ]]; then
@@ -118,8 +118,8 @@ fi
 
 if [[ -n "$LIVE_PANE" ]]; then
   # Sidebar real corriendo: igualar ancho al origen y darle foco
-  $TMUXBIN resize-pane -t "$LIVE_PANE" -x "$SIDEBAR_W" 2>/dev/null
-  $TMUXBIN select-pane -t "$LIVE_PANE" 2>/dev/null
+  $TMUXBIN resize-pane -t "$LIVE_PANE" -x "$SIDEBAR_W" 2>/dev/null || true
+  $TMUXBIN select-pane -t "$LIVE_PANE" 2>/dev/null || true
   exit 0
 fi
 
@@ -141,8 +141,8 @@ _dedup_sessions_panes() {
 if [[ -n "$DEAD_PANE" ]]; then
   # Pane muerto: reconectar al sidebar server, restaurar título y limpiar duplicados
   $TMUXBIN respawn-pane -t "$DEAD_PANE" -k \
-    "exec $TMUXBIN -L $SERVER attach-session -t $SESSION"
-  $TMUXBIN select-pane -t "$DEAD_PANE" -T "Sessions" 2>/dev/null
+    "exec $TMUXBIN -L $SERVER attach-session -t $SESSION" || true
+  $TMUXBIN select-pane -t "$DEAD_PANE" -T "Sessions" 2>/dev/null || true
   _dedup_sessions_panes "$DEST_SESS:$DEST_WIN" "$DEAD_PANE"
   exit 0
 fi
@@ -150,16 +150,16 @@ fi
 # No hay sidebar en destino: crear uno a la izquierda al mismo ancho que el origen
 LEFTMOST_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
   -F '#{pane_left}|#{pane_id}' 2>/dev/null \
-  | sort -t'|' -k1 -n | head -1 | cut -d'|' -f2)
+  | sort -t'|' -k1 -n | head -1 | cut -d'|' -f2) || true
 
 _target="$DEST_SESS:$DEST_WIN"
 [[ -n "$LEFTMOST_PANE" ]] && _target="$LEFTMOST_PANE"
 
 $TMUXBIN split-window -hb -l "$SIDEBAR_W" -t "$_target" \
-  "exec $TMUXBIN -L $SERVER attach-session -t $SESSION"
+  "exec $TMUXBIN -L $SERVER attach-session -t $SESSION" || true
 
 # split-window deja el foco en el nuevo pane — asignar título y mantener foco
 NEW_PANE_ID=$($TMUXBIN display-message -p '#{pane_id}' 2>/dev/null)
-[[ -n "$NEW_PANE_ID" ]] && $TMUXBIN select-pane -t "$NEW_PANE_ID" -T "Sessions" 2>/dev/null
+[[ -n "$NEW_PANE_ID" ]] && $TMUXBIN select-pane -t "$NEW_PANE_ID" -T "Sessions" 2>/dev/null || true
 _dedup_sessions_panes "$DEST_SESS:$DEST_WIN" "$NEW_PANE_ID"
 exit 0

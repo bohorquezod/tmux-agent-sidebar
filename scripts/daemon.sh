@@ -320,14 +320,14 @@ build_summary() {
   local _type _server _sess _widx _wname _icon _sigla _islast _f
 
   if [[ -f "$DATA_FILE" ]]; then
-    while IFS="$FIELD_SEP" read -r _type _server _sess _widx _wname _icon _sigla _islast; do
+    while IFS="$FIELD_SEP" read -r _type _server _sess _widx _wname _icon _sigla _islast _ptitle; do
       [[ "$_type" == "W" ]] || continue
       case "$_icon" in
-        W) ((_working++)) ;;
-        I) ((_idle++)) ;;
-        P) ((_blocked++)) ;;
-        L) ((_loop++)) ;;
-        X) ((_crashed++)) ;;
+        "$STATE_WORKING") ((_working++)) ;;
+        "$STATE_IDLE") ((_idle++)) ;;
+        "$STATE_BLOCKED") ((_blocked++)) ;;
+        "$STATE_LOOP") ((_loop++)) ;;
+        "$STATE_CRASHED") ((_crashed++)) ;;
       esac
     done <"$DATA_FILE"
   fi
@@ -399,7 +399,7 @@ while true; do
     build_summary
     LAST_BUILD=$SECONDS
     HAS_WORKING=false
-    grep -qE '\|(W|L)\|' "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
+    grep -qE "\|(${STATE_WORKING}|${STATE_LOOP})\|" "$DATA_FILE" 2>/dev/null && HAS_WORKING=true
     notify_clients
   fi
 

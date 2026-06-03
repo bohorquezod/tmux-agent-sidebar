@@ -1,8 +1,8 @@
 S|main|1
 E|main|work|1
-W|main|work|0|win-empty|E||0
-W|main|work|1|win-working|W||0
-W|main|work|2|win-idle|I||0
-W|main|work|3|win-blocked|P||0
-W|main|work|4|win-loop|L||0
-W|main|work|5|win-crashed|X||1
+W|main|work|0|win-empty|empty||0
+W|main|work|1|win-working|working||0
+W|main|work|2|win-idle|idle||0
+W|main|work|3|win-blocked|blocked||0
+W|main|work|4|win-loop|loop||0
+W|main|work|5|win-crashed|crashed||1

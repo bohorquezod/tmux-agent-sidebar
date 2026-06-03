@@ -79,9 +79,9 @@ render_window_row() {
   local _rwr_item="$1" _rwr_srv="$2" _rwr_sess="$3" _rwr_widx="$4"
 
   local _wmeta="${_win_meta["${_rwr_srv}|${_rwr_sess}|${_rwr_widx}"]:-}"
-  local _wname _wicon _wagent _islast
-  IFS='|' read -r _wname _wicon _wagent _islast <<<"$_wmeta"
-  [[ -z "$_wicon" ]] && _wicon="E"
+  local _wname _wicon _wagent _islast _ptitle
+  IFS='|' read -r _wname _wicon _wagent _islast _ptitle <<<"$_wmeta"
+  [[ -z "$_wicon" ]] && _wicon="$STATE_EMPTY"
   [[ -z "$_islast" ]] && _islast="1"
 
   # ── State computation ────────────────────────────────────────────────────────
@@ -90,18 +90,18 @@ render_window_row() {
 
   local _state
   case "$_wicon" in
-    "E") _state="empty" ;;
-    "W")
-      _state="working"
+    "$STATE_WORKING")
+      _state="$STATE_WORKING"
       _HAS_WORKING=1
       ;;
-    "P") _state="blocked" ;;
-    "L")
-      _state="loop"
+    "$STATE_LOOP")
+      _state="$STATE_LOOP"
       _HAS_WORKING=1
       ;;
-    "X") _state="crashed" ;;
-    *) _state="idle" ;;
+    "$STATE_EMPTY" | "$STATE_BLOCKED" | "$STATE_CRASHED" | "$STATE_IDLE")
+      _state="$_wicon"
+      ;;
+    *) _state="$STATE_IDLE" ;;
   esac
 
   if [[ "$_state" == "empty" ]]; then

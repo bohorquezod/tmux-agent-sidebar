@@ -69,7 +69,8 @@ setup() {
   # Needed so render's `cat current_session` exits 0 (empty session = no active window)
   touch "$STATE_DIR/current_session"
 
-  # Source all three render modules; render.sh defines colors so override them after.
+  # Source all render modules; states.sh must come first so STATE_* constants are defined.
+  source "$(lib_dir)/states.sh"
   source "$(lib_dir)/render-icons.sh"
   source "$(lib_dir)/render-row.sh"
   source "$(lib_dir)/render.sh"
