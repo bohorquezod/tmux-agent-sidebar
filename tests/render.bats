@@ -59,10 +59,24 @@ setup() {
   _sess_act=()
   _win_keys=()
 
+  # Additional globals for new render.sh architecture
+  _INFO_MODE=0
+  _CURRENT_W=0
+  _CURRENT_H=0
+  _outer_sess=""
+  _outer_win=""
+
   # Needed so render's `cat current_session` exits 0 (empty session = no active window)
   touch "$STATE_DIR/current_session"
 
+  # Source all three render modules; render.sh defines colors so override them after.
+  source "$(lib_dir)/render-icons.sh"
+  source "$(lib_dir)/render-row.sh"
   source "$(lib_dir)/render.sh"
+
+  # Override colors to empty so output is plain text (greppable without ANSI noise).
+  # render.sh defines these at module level, so they must be overridden after sourcing.
+  R="" G="" BG="" PU="" GR="" RD="" YL="" CY="" WH=""
 }
 
 teardown() {
@@ -133,39 +147,39 @@ teardown() {
 
 @test "render: E icon maps to · (empty dot)" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '· win-empty' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '· win-empty' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 @test "render: W icon maps to spinner character" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
   # _SPIN_FRAME starts at 0; render increments it to 1 → _SPINNER[1]="[W1]"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '[W1] win-working' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '[W1] win-working' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 @test "render: I icon maps to ○" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '○ win-idle' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '○ win-idle' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 @test "render: P icon maps to ?" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '? win-blocked' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '? win-blocked' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 @test "render: L icon maps to ↺" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '↺ win-loop' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '↺ win-loop' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 @test "render: X icon maps to ✗" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '✗ win-crashed' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '✗ win-crashed' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 # ── render: unread flag ────────────────────────────────────────────────────────
@@ -174,15 +188,15 @@ teardown() {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
   # win-idle is server=main, session=work, idx=2 → key main_work_2
   touch "$STATE_DIR/main_work_2.unread"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '◉ win-idle' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '◉ win-idle' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
 
 @test "render: no unread file → idle window shows ○, not ◉" {
   cp "$(fixtures_dir)/data_with_all_icons.txt" "$DATA_FILE"
   # Ensure no stale unread flag
   rm -f "$STATE_DIR/main_work_2.unread"
-  render > "$BATS_TMPDIR/out.txt" 2>&1
-  grep -qF '○ win-idle' "$BATS_TMPDIR/out.txt"
-  ! grep -qF '◉ win-idle' "$BATS_TMPDIR/out.txt"
+  render > "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt" 2>&1
+  grep -qF '○ win-idle' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
+  ! grep -qF '◉ win-idle' "${BATS_TEST_TMPDIR:-$BATS_TMPDIR}/out.txt"
 }
