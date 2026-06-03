@@ -2,6 +2,12 @@
 # Sourced by daemon.sh. Assumes STATE_DIR, CLAUDE_SESSIONS_DIR, STATE_* are already set.
 # No shebang — not executed directly.
 
+readonly LOOP_WINDOW_SECS=600
+readonly LOOP_MIN_TRANSITIONS=3
+readonly LOOP_MIN_SPACING_SECS=60
+readonly CONTENT_SCAN_WIDE=1500
+readonly CONTENT_SCAN_NARROW=1000
+
 # detect_icon ppid cmd lines title pdead → empty|working|idle|blocked|loop|crashed
 detect_icon() {
   local _ppid="$1" _cmd="$2" _lines="$3" _title="${4:-}" _pdead="${5:-0}"
@@ -71,8 +77,8 @@ detect_icon() {
   # Fallback nivel 2: content scanning (versiones viejas / sin session file)
   if [[ -z "$_lines" ]]; then _log_debug "detect_icon: ppid=$_ppid cmd=$_cmd → empty (no content)"; printf '%s' "$STATE_EMPTY"; return; fi
 
-  local _wide="${_lines: -1500}"
-  local _narrow="${_lines: -1000}"
+  local _wide="${_lines: -${CONTENT_SCAN_WIDE}}"
+  local _narrow="${_lines: -${CONTENT_SCAN_NARROW}}"
   local _icon="$STATE_EMPTY" _min=999999 _tmp _tlen
 
   _tmp="${_wide##*⏺}";            _tlen=${#_tmp}
@@ -142,11 +148,11 @@ check_loop() {
     local _last_ts="0"
     [[ -f "$_loop_f" ]] && _last_ts=$(tail -1 "$_loop_f" 2>/dev/null)
     [[ -z "$_last_ts" || ! "$_last_ts" =~ ^[0-9]+$ ]] && _last_ts=0
-    if (( _now - _last_ts >= 60 )); then
+    if (( _now - _last_ts >= LOOP_MIN_SPACING_SECS )); then
       printf '%s\n' "$_now" >> "$_loop_f"
     fi
-    # Podar entradas antiguas (>600s)
-    local _cutoff=$(( _now - 600 )) _trimmed="" _ts
+    # Podar entradas antiguas (>LOOP_WINDOW_SECS)
+    local _cutoff=$(( _now - LOOP_WINDOW_SECS )) _trimmed="" _ts
     [[ -f "$_loop_f" ]] && while IFS= read -r _ts; do
       [[ -n "$_ts" && "$_ts" -gt "$_cutoff" ]] && _trimmed+="${_ts}"$'\n'
     done < "$_loop_f"
@@ -162,7 +168,7 @@ check_loop() {
     _loop_count=$(grep -c '[0-9]' "$_loop_f" 2>/dev/null || echo 0)
   fi
 
-  if [[ "${_loop_count:-0}" -ge 3 && ( "$_icon" == "$STATE_IDLE" || "$_icon" == "$STATE_BLOCKED" || "$_icon" == "$STATE_LOOP" ) ]]; then
+  if [[ "${_loop_count:-0}" -ge $LOOP_MIN_TRANSITIONS && ( "$_icon" == "$STATE_IDLE" || "$_icon" == "$STATE_BLOCKED" || "$_icon" == "$STATE_LOOP" ) ]]; then
     _save_icon="$STATE_LOOP"
     printf '%s' "$STATE_LOOP" > "$_prev_f"
     return 0
