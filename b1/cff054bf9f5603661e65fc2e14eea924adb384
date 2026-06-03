@@ -1,0 +1,23 @@
+.github/workflows/shfmt.yml
+  s_2e1f6905edbcde::t_afcb67ef30e36d 1-25
+tests/run_tests.sh
+  s_2e1f6905edbcde::t_fdb42b41b153f2 12-21
+.editorconfig
+  s_2e1f6905edbcde::t_c014f81bf297c8 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b1cff054bf9f5603661e65fc2e14eea924adb384",
+  "prompts": {},
+  "sessions": {
+    "s_2e1f6905edbcde": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8c0b214-126c-4c2e-9eb3-c4c920245570",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
