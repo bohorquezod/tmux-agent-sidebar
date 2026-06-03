@@ -43,12 +43,11 @@ _exec_cmd() {
       local _ci _ct _cr
       if [[ "$_args" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
         _resolve_ordinal "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" || return
-        # shellcheck disable=SC2154  # _ri_ci/_ri_ct/_ri_cr set by _resolve_ordinal in nav.sh
-        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"
+        # _ri_ci/_ri_ct/_ri_cr set by _resolve_ordinal in nav.sh (cross-module globals)
+        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"  # shellcheck disable=SC2154
       elif [[ "$_args" =~ ^([0-9]+)$ ]]; then
         _resolve_ordinal "${BASH_REMATCH[1]}" || return
-        # shellcheck disable=SC2154
-        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"
+        _ci="$_ri_ci"; _ct="$_ri_ct"; _cr="$_ri_cr"  # shellcheck disable=SC2154
       else
         _ci="${ITEMS_FLAT[$SELECTED]:-}"; _ct="${_ci%%|*}"; _cr="${_ci#*|}"
       fi
