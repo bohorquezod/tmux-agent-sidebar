@@ -1,0 +1,43 @@
+tests/helpers/mock_tmux.bash
+  s_f8b65703f75c9a::t_1f77ab13972a2f 10-43
+tests/helpers/common.bash
+  s_f8b65703f75c9a::t_f91ee2c435da1b 3-4,6-8
+  s_f8b65703f75c9a::t_5e6201d3f5271a 31-37
+tests/ops.bats
+  s_f8b65703f75c9a::t_d3c87977da30a3 33-35
+  s_f8b65703f75c9a::t_4f755b3f839dd0 13-16
+  s_f8b65703f75c9a::t_0ffffac73321db 26-28
+scripts/lib/render.sh
+  s_f8b65703f75c9a::t_e9c682cda2bee6 77,86
+  s_f8b65703f75c9a::t_f9a8566093400d 425,429,435
+  s_f8b65703f75c9a::t_b91f4155f48073 482,484
+  s_f8b65703f75c9a::t_3d18dd21b03712 583
+  s_f8b65703f75c9a::t_99f4ead1d97a37 224,233
+  s_f8b65703f75c9a::t_e37bed75166553 505
+  s_f8b65703f75c9a::t_98eac2ae86bf14 251-256,261
+  s_f8b65703f75c9a::t_15af24b125a441 10
+tests/render.bats
+  s_f8b65703f75c9a::t_e5a3943b38d79a 69-72
+  s_f8b65703f75c9a::t_e9a7494c12f96c 62-64
+  s_f8b65703f75c9a::t_18024aac51e272 29-30
+scripts/lib/nav.sh
+  s_f8b65703f75c9a::t_57b2bcd4e2abd6 72-73,83-84
+scripts/lib/ops.sh
+  s_f8b65703f75c9a::t_61df7fa183dec6 168,171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "24979f7f42f36ef741e31263295a9791a59f0a30",
+  "prompts": {},
+  "sessions": {
+    "s_f8b65703f75c9a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ade562c4-6286-497c-a83d-4fd7747d0b96",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
