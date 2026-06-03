@@ -119,7 +119,6 @@ teardown() {
   _RENAME_TYPE="S"
   SESSIONS_FLAT=("main|old-session")
   _apply_rename
-  # tmux must not be called
   local count
   count=$(tmux_call_count)
   [ "$count" -eq 0 ]
@@ -155,6 +154,18 @@ teardown() {
   [ "$(cat "$STATE_DIR/current_session")" = "new-session" ]
 }
 
+@test "_apply_rename: does not update current_session when renaming inactive session" {
+  _RENAME_ITEM="S|main|other-sess"
+  _RENAME_TYPE="S"
+  _RENAME_BUF="renamed"
+  SESSIONS_FLAT=("main|other-sess")
+  printf '%s' "active-sess" > "$STATE_DIR/current_session"
+  _apply_rename
+  local result
+  result=$(cat "$STATE_DIR/current_session")
+  [ "$result" = "active-sess" ]
+}
+
 @test "_apply_rename: calls rename-window with correct args" {
   _RENAME_ITEM="W|main|my-session|2"
   _RENAME_TYPE="W"
@@ -165,11 +176,19 @@ teardown() {
   [ "$last" = "rename-window -t my-session:2 new-win-name" ]
 }
 
-@test "_apply_rename: touches DIRTY_FILE after rename" {
+@test "_apply_rename: touches DIRTY_FILE after session rename" {
   _RENAME_ITEM="S|main|old-session"
   _RENAME_TYPE="S"
   _RENAME_BUF="new-session"
   SESSIONS_FLAT=("main|old-session")
+  _apply_rename
+  [ -f "$DIRTY_FILE" ]
+}
+
+@test "_apply_rename: touches DIRTY_FILE after window rename" {
+  _RENAME_ITEM="W|main|my-session|2"
+  _RENAME_TYPE="W"
+  _RENAME_BUF="new-win-name"
   _apply_rename
   [ -f "$DIRTY_FILE" ]
 }
