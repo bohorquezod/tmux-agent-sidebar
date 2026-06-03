@@ -165,7 +165,7 @@ _apply_rename() {
     local _si2=0
     for _sf in "${SESSIONS_FLAT[@]}"; do
       [[ "$_sf" == "${_srv}|${_old_sess}" ]] && { SESSIONS_FLAT[$_si2]="${_srv}|${_RENAME_BUF}"; break; }
-      (( _si2++ ))
+      (( ++_si2 ))
     done
     # Propagar a current_session si era la sesión activa
     local _cs; _cs=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
