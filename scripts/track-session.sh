@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # track-session.sh — escribe la sesión activa del cliente al STATE_DIR
 # Invocado por el hook after-switch-client en el entry point del plugin
 

@@ -7,6 +7,7 @@ if (( _bash_ver < 4 )); then
   printf 'tmux-agent-sidebar requires bash 4+. Current: %s\n' "$BASH_VERSION" >&2
   exit 1
 fi
+set -u
 
 # Forzar UTF-8
 export LANG="${LANG:-en_US.UTF-8}"

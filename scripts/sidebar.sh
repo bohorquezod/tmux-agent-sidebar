@@ -7,6 +7,10 @@ if (( _bash_ver < 4 )); then
   printf 'tmux-agent-sidebar requires bash 4+. Current: %s\n' "$BASH_VERSION" >&2
   exit 1
 fi
+set -u
+# Normalizar env vars opcionales para que set -u no falle en referencias posteriores
+OUTER_TMUX_SOCKET="${OUTER_TMUX_SOCKET:-}"
+POPUP_MODE="${POPUP_MODE:-}"
 
 # Deshabilitar echo y asegurar que \n produzca \r\n (ONLCR) en la pty.
 stty -echo onlcr 2>/dev/null

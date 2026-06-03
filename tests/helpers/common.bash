@@ -26,3 +26,10 @@ load_detect() {
   setup_state_dirs
   source "$(lib_dir)/detect.sh"
 }
+
+# Retorna la ruta absoluta de tests/helpers/fixtures/
+fixtures_dir() {
+  local _repo_root
+  _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  printf '%s/tests/helpers/fixtures' "$_repo_root"
+}
