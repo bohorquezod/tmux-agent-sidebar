@@ -18,6 +18,7 @@ DATA_FILE="${STATE_DIR}/data"
 SUMMARY_FILE="${STATE_DIR}/summary"
 DIRTY_FILE="${STATE_DIR}/dirty"
 PID_FILE="${STATE_DIR}/daemon.pid"
+_BUILD_TMPDIR=""
 CLIENTS_DIR="${STATE_DIR}/clients"
 CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
@@ -34,6 +35,12 @@ source "${SCRIPT_DIR}/lib/detect.sh"
 # ── Singleton con lock atómico ─────────────────────────────────────────────────
 LOCK_DIR="${STATE_DIR}/daemon.lock"
 _LOCK_PID_FILE="${LOCK_DIR}/pid"
+
+_daemon_cleanup() {
+  rm -f  "$PID_FILE"
+  rm -rf "$LOCK_DIR"
+  [[ -n "${_BUILD_TMPDIR:-}" ]] && rm -rf "$_BUILD_TMPDIR"
+}
 
 _try_acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -56,7 +63,7 @@ _try_acquire_lock() {
 if ! _try_acquire_lock; then
   exit 0
 fi
-trap 'rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"' EXIT INT TERM
+trap '_daemon_cleanup' EXIT INT TERM
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,11 +78,11 @@ current_server_name() {
 #   W|server|session|win_idx|win_name|icon|agent_sigla|is_last(0/1)
 
 build_data() {
-  local _current _socket_dir _buf _tmpdir _servers
+  local _current _socket_dir _buf _servers
   _current=$(current_server_name)
   _socket_dir="${TMPDIR:-/tmp}/tmux-$(id -u)"
   _buf=""
-  _tmpdir=$(mktemp -d)
+  _BUILD_TMPDIR=$(mktemp -d)
   _servers=("$_current")
 
   if [[ -d "$_socket_dir" ]]; then
@@ -123,7 +130,7 @@ build_data() {
       fi
       # Capturar contenido para detección de P y fallback
       $TMUXBIN "${_sargs[@]}" capture-pane -t "$_paneid" -p \
-        > "$_tmpdir/${_server}_${_paneid//[^a-zA-Z0-9]/_}" 2>/dev/null &
+        > "$_BUILD_TMPDIR/${_server}_${_paneid//[^a-zA-Z0-9]/_}" 2>/dev/null &
     done <<< "$_PANES"
     wait
 
@@ -185,7 +192,7 @@ build_data() {
         done <<< "$_PANES"
 
         local _lines="" _ck="${_capid//[^a-zA-Z0-9]/_}"
-        [[ -n "$_capid" && -f "$_tmpdir/${_server}_${_ck}" ]] && _lines=$(<"$_tmpdir/${_server}_${_ck}")
+        [[ -n "$_capid" && -f "$_BUILD_TMPDIR/${_server}_${_ck}" ]] && _lines=$(<"$_BUILD_TMPDIR/${_server}_${_ck}")
 
         local _cap_key="${_server//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
         printf '%s' "$_lines" > "${CAPTURES_DIR}/${_cap_key}"
@@ -259,7 +266,8 @@ build_data() {
     done
   done
 
-  rm -rf "$_tmpdir"
+  rm -rf "$_BUILD_TMPDIR"
+  _BUILD_TMPDIR=""
   printf '%s' "$_buf" > "${DATA_FILE}.tmp"
   mv "${DATA_FILE}.tmp" "$DATA_FILE"
 }
