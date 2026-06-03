@@ -27,6 +27,7 @@ CAPTURES_DIR="${STATE_DIR}/captures"
 ORDER_FILE="${HOME}/.tmux-sidebar-order"
 CLAUDE_SESSIONS_DIR="${HOME}/.claude/sessions"
 
+# shellcheck disable=SC2034  # TAB reserved for future TSV output format
 readonly TAB=$'\t'
 readonly FIELD_SEP='|'
 readonly DAEMON_SLEEP_INTERVAL=0.2

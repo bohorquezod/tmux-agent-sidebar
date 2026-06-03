@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2034  # all STATE_* constants used in sourced modules
 # states.sh — State name constants for icon detection
 # Sourced before all other lib modules. No shebang — not executed directly.
 # Globals: STATE_EMPTY STATE_WORKING STATE_IDLE STATE_BLOCKED STATE_LOOP STATE_CRASHED

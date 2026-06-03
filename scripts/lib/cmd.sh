@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # cmd.sh — command buffer execution and hints
 # Sourced by sidebar.sh. Assumes all sidebar globals are already set.
 # No shebang — not executed directly.
@@ -42,13 +43,20 @@ _exec_cmd() {
       local _ci _ct _cr
       if [[ "$_args" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
         _resolve_ordinal "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" || return
+        # _ri_ci/_ri_ct/_ri_cr set by _resolve_ordinal in nav.sh (cross-module globals)
+        # shellcheck disable=SC2154
         _ci="$_ri_ci"
+        # shellcheck disable=SC2154
         _ct="$_ri_ct"
+        # shellcheck disable=SC2154
         _cr="$_ri_cr"
       elif [[ "$_args" =~ ^([0-9]+)$ ]]; then
         _resolve_ordinal "${BASH_REMATCH[1]}" || return
+        # shellcheck disable=SC2154
         _ci="$_ri_ci"
+        # shellcheck disable=SC2154
         _ct="$_ri_ct"
+        # shellcheck disable=SC2154
         _cr="$_ri_cr"
       else
         _ci="${ITEMS_FLAT[$SELECTED]:-}"
@@ -120,7 +128,8 @@ _exec_cmd() {
 
     # ── :move N N2 / N.M N2.M2 — reordenar por posición ─────────────────
     :move)
-      local _src="${_args%% *}" _dst="${_args#"$_src" }"
+      local _src="${_args%% *}"
+      local _dst="${_args#"$_src" }"
       [[ -z "$_src" || -z "$_dst" || "$_src" == "$_dst" ]] && return
       if [[ "$_src" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
         # Mover ventana N.M → N2.M2
@@ -267,6 +276,7 @@ _exec_cmd() {
     [[ -n "$POPUP_MODE" ]] && exit 0
   else
     SELECTED=$_si
+    # shellcheck disable=SC2034  # CURSOR_ITEM read by sidebar main loop and ops.sh
     CURSOR_ITEM="${ITEMS_FLAT[$_si]}"
     local _active_win
     _active_win=$("${OUTER_TMUX[@]}" list-windows -t "$_ssess" \

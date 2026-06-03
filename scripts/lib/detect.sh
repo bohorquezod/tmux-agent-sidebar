@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # detect.sh — icon detection and loop tracking
 # Sourced by daemon.sh. Assumes STATE_DIR, CLAUDE_SESSIONS_DIR, STATE_* are already set.
 # No shebang — not executed directly.

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # log.sh — levelled logging for tmux-agent-sidebar
 # Sourced by daemon.sh and sidebar.sh. STATE_DIR must be set before sourcing.
 # AGENT_SIDEBAR_LOG: 0=off (default), 1=info, 2=debug
