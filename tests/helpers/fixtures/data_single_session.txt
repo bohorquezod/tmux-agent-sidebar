@@ -1,0 +1,3 @@
+S|main|1
+E|main|work|1
+W|main|work|0|bash|E||1

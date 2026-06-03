@@ -7,7 +7,7 @@ file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null ||
 # ── Help overlay ─────────────────────────────────────────────────────────────
 render_help() {
   local _sz W H
-  _sz=$(stty size 2>/dev/null)
+  _sz=$(stty size 2>/dev/null) || true
   W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
   H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
@@ -74,7 +74,7 @@ render() {
   # stty size lee TIOCGWINSZ directamente — refleja el tamaño real del pty incluso cuando
   # $COLUMNS no se ha actualizado aún (bash solo lo actualiza tras comandos externos, no read).
   local _sz W H
-  _sz=$(stty size 2>/dev/null)
+  _sz=$(stty size 2>/dev/null) || true
   W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
   H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
   # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho.
@@ -83,7 +83,7 @@ render() {
   local _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
   local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
   [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
-  local _sw; _sw=$(cat "$_width_f" 2>/dev/null)
+  local _sw; _sw=$(cat "$_width_f" 2>/dev/null) || true
   if [[ "$W" != "$_sw" ]]; then
     printf '%s' "$W" > "$_width_f"
     printf '%s' "$W" > "${STATE_DIR}/sidebar_width"
@@ -221,7 +221,7 @@ render() {
         _iir="${_init_item#*|}"; _iis="${_iir#*|}"
         [[ "$_iis" == "$_init_target" ]] && { SELECTED=$_ini; break; }
       fi
-      (( _ini++ ))
+      (( ++_ini ))
     done
   fi
 
@@ -230,7 +230,7 @@ render() {
     local _ci=0 _cfound=false
     for _item in "${ITEMS_FLAT[@]}"; do
       [[ "$_item" == "$CURSOR_ITEM" ]] && { SELECTED=$_ci; _cfound=true; break; }
-      (( _ci++ ))
+      (( ++_ci ))
     done
     CURSOR_ITEM=""
   fi
@@ -248,17 +248,17 @@ render() {
     local _wi2="${_wmeta2#*|}"  # skip name field
     _wi2="${_wi2%%|*}"          # extract icon field
     case "$_wi2" in
-      "W") (( _wc++ )); _HAS_WORKING=1 ;;
-      "I") (( _ic_raw++ )) ;;
-      "E") (( _ec++ )) ;;
-      "P") (( _pc++ )) ;;
-      "L") (( _lc++ )); _HAS_WORKING=1 ;;
-      "X") (( _xc++ )) ;;
+      "W") (( ++_wc )); _HAS_WORKING=1 ;;
+      "I") (( ++_ic_raw )) ;;
+      "E") (( ++_ec )) ;;
+      "P") (( ++_pc )) ;;
+      "L") (( ++_lc )); _HAS_WORKING=1 ;;
+      "X") (( ++_xc )) ;;
     esac
     if [[ "$_wi2" != "E" ]]; then
       local _uk2="${_wk2//[^a-zA-Z0-9_-]/_}"
       _uk2="${_uk2//|/_}"
-      [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && (( _uc++ ))
+      [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && (( ++_uc ))
     fi
   done
 
@@ -422,17 +422,17 @@ render() {
     if [[ "$_itype" == "S" ]]; then
       local _srv="${_irest%%|*}" _sess="${_irest#*|}"
 
-      (( _sess_num++ ))
+      (( ++_sess_num ))
 
       # Filtro de estado: saltar sesiones sin ventanas matching
       if [[ -n "$_FILTER_STATUS" && "$_filt_skeys" != *" ${_srv}|${_sess}"* ]]; then
-        (( _ii++ )); continue
+        (( ++_ii )); continue
       fi
 
       # En drill-down: saltar sesiones que no coinciden
       if [[ "$_drill_mode" == "1" ]]; then
         if [[ $_sess_num -ne $_drill_snum ]]; then
-          _in_drill_sess=0; (( _ii++ )); continue
+          _in_drill_sess=0; (( ++_ii )); continue
         fi
         _in_drill_sess=1; _win_ord=0
       fi
@@ -479,9 +479,9 @@ render() {
     elif [[ "$_itype" == "W" ]]; then
       # En drill-down: saltar ventanas de sesiones que no son la drill
       if [[ "$_drill_mode" == "1" && "$_in_drill_sess" == "0" ]]; then
-        (( _ii++ )); continue
+        (( ++_ii )); continue
       fi
-      (( _win_ord++ ))
+      (( ++_win_ord ))
 
       local _srv="${_irest%%|*}" _wrest="${_irest#*|}"
       local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
@@ -502,7 +502,7 @@ render() {
           idle)    [[ "$_wicon" != "E" && "$_wicon" != "W" && "$_wicon" != "L" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
           unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
-        [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
+        [[ "$_fwmatch" == "0" ]] && { (( ++_ii )); continue; }
       fi
 
       # ── Unread tracking ──────────────────────────────────────────────────────
@@ -580,7 +580,7 @@ render() {
       mapbuf+="${_srv}|${_sess}|${_widx}"$'\n'
     fi
 
-    (( _ii++ ))
+    (( ++_ii ))
   done
 
   [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
