@@ -84,13 +84,13 @@ _resolve_ordinal() {
   local _n=0 _ii=0 _si=-1
   for _it in "${ITEMS_FLAT[@]}"; do
     [[ "${_it%%|*}" == "S" ]] && {
-      ((_n++))
+      ((_n++)) || true
       [[ $_n -eq $_snum ]] && {
         _si=$_ii
         break
       }
     }
-    ((_ii++))
+    ((_ii++)) || true
   done
   [[ $_si -lt 0 ]] && return 1
   if [[ -z "$_wnum" ]]; then
@@ -104,13 +104,13 @@ _resolve_ordinal() {
     local _wit="${ITEMS_FLAT[$_wi]}"
     [[ "${_wit%%|*}" == "S" ]] && break
     [[ "${_wit%%|*}" == "W" ]] && {
-      ((_wn++))
+      ((_wn++)) || true
       [[ $_wn -eq $_wnum ]] && {
         _wfound=$_wi
         break
       }
     }
-    ((_wi++))
+    ((_wi++)) || true
   done
   [[ $_wfound -lt 0 ]] && return 1
   _ri_ci="${ITEMS_FLAT[$_wfound]}"
