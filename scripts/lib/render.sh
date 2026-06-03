@@ -1,13 +1,81 @@
 # shellcheck shell=bash
-# render.sh — sidebar rendering (render, render_help, file_mtime)
-# Sourced by sidebar.sh. Assumes all sidebar globals are already set.
-# No shebang — not executed directly.
+# render.sh — sidebar rendering entry point and frame loop
+# Sourced by sidebar.sh. No shebang — not executed directly.
+# Requires: render-icons.sh and render-row.sh sourced first.
 
 # ── ANSI color palette ────────────────────────────────────────────────────────
 R=$'\033[0m';  G=$'\033[32m';  BG=$'\033[1;32m'
 PU=$'\033[1;35m'; GR=$'\033[90m'; RD=$'\033[31m'; YL=$'\033[1;33m'; CY=$'\033[1;36m'; WH=$'\033[1;37m'
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
+
+# Sorts SESSIONS_FLAT in-place by session name (alpha order)
+_sessions_sort_alpha() {
+  [[ ${#SESSIONS_FLAT[@]} -le 1 ]] && return
+  local _sorted=()
+  while IFS= read -r _e; do [[ -n "$_e" ]] && _sorted+=("$_e"); done \
+    < <(printf '%s\n' "${SESSIONS_FLAT[@]}" | sort -t'|' -k2)
+  SESSIONS_FLAT=("${_sorted[@]}")
+}
+
+# Sorts a _data_wins array in-place by window name via _win_meta.
+# Args: <server> <session> <nameref to array>
+_windows_sort_alpha() {
+  local _srv="$1" _sess="$2"
+  local -n _wref="$3"
+  [[ ${#_wref[@]} -le 1 ]] && return
+  local _named=() _dw _nm
+  for _dw in "${_wref[@]}"; do
+    _nm="${_win_meta["${_srv}|${_sess}|${_dw}"]%%|*}"
+    _named+=("${_nm}|${_dw}")
+  done
+  _wref=()
+  while IFS= read -r _line; do [[ -n "$_line" ]] && _wref+=("${_line#*|}"); done \
+    < <(printf '%s\n' "${_named[@]}" | sort -t'|' -k1)
+}
+
+# ── Differential rendering state ─────────────────────────────────────────────
+declare -a _DIFF_LINES=()
+_DIFF_W=0
+_DIFF_H=0
+_DIFF_MODE=""
+
+# _diff_print <buf> <W> <H> <mode>
+# Emits only the lines that changed since last call. Full redraw on first
+# render, resize, or mode transition (main / search / help).
+_diff_print() {
+  local buf="$1" w="$2" h="$3" mode="${4:-main}"
+  local _E=$'\033'
+
+  local -a _new=()
+  local _ln
+  while IFS= read -r _ln; do
+    _new+=("$_ln")
+  done <<< "$buf"
+
+  local _nlen=${#_new[@]} _plen=${#_DIFF_LINES[@]}
+
+  # Full redraw: first render, resize, or mode change.
+  # Overwrite in place (home → write+erase-line per line → clear rest) — never clears screen first,
+  # so there is no blank-screen flash even when the whole buffer needs to change.
+  if [[ "$w" != "$_DIFF_W" || "$h" != "$_DIFF_H" || $_plen -eq 0 || "$mode" != "$_DIFF_MODE" ]]; then
+    local _NL=$'\n' _EL=$'\033[K'
+    printf '\033[?25l\033[H%s\033[J' "${buf//$_NL/${_EL}${_NL}}"
+    _DIFF_LINES=("${_new[@]}")
+    _DIFF_W=$w; _DIFF_H=$h; _DIFF_MODE=$mode
+    return
+  fi
+
+  local _out='' _i
+  for (( _i=0; _i<_nlen; _i++ )); do
+    [[ "${_new[$_i]}" != "${_DIFF_LINES[$_i]:-}" ]] && \
+      _out+="${_E}[$(( _i + 1 ));1H${_new[$_i]}${_E}[K"
+  done
+  # Clear leftover lines if new render is shorter than previous
+  (( _plen > _nlen )) && _out+="${_E}[$(( _nlen + 1 ));1H${_E}[J"
+  [[ -n "$_out" ]] && printf '\033[?25l%s' "$_out"
+  _DIFF_LINES=("${_new[@]}")
+}
 
 # ── Help overlay ─────────────────────────────────────────────────────────────
 render_help() {
@@ -30,25 +98,94 @@ render_help() {
   buf+=" ${GR}Jump${R}"$'\n'
   buf+=" ${WH}w${R}    next working ${CY}⠿${R}"$'\n'
   buf+=" ${WH}u${R}    next unread  ${YL}◉${R}"$'\n'
+  buf+=" ${WH}U${R}    mark all read"$'\n'
+  buf+=" ${WH}m${R}    mark unread  ${YL}◉${R}"$'\n'
   buf+=$'\n'
   buf+=" ${GR}Reorder${R}"$'\n'
   buf+=" ${WH}J${R}    move down"$'\n'
   buf+=" ${WH}K${R}    move up"$'\n'
   buf+=$'\n'
   buf+=" ${GR}Other${R}"$'\n'
+  buf+=" ${WH}i${R}    window info"$'\n'
   buf+=" ${WH}:${R}    command  ${GR}N / N.M${R}"$'\n'
-  buf+=" ${WH}r${R}    reload"$'\n'
+  buf+=" ${WH}a${R}    sort alpha/manual"$'\n'
+  buf+=" ${WH}r${R}    rename"$'\n'
+  buf+=" ${WH}R${R}    reload"$'\n'
   buf+=" ${WH}q${R}    quit"$'\n'
   buf+=$'\n'
   buf+="${GR}${sep}${R}"$'\n'
   buf+="${GR} ? or any key to close${R}"$'\n'
   buf+=" ${GR}v${PLUGIN_VERSION}${R}"
+  _diff_print "$buf" "$W" "$H" "help"
+}
+
+# ── Info overlay ─────────────────────────────────────────────────────────────
+render_info() {
+  local _sz W
+  _sz=$(stty size 2>/dev/null)
+  W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
+  local sep; sep=$(printf '─%.0s' $(seq 1 $W))
+  local buf=""
+  buf+=" ${PU}◈${R}  ${WH}Window Info${R}"$'\n'
+  buf+="${GR}${sep}${R}"$'\n'
+  buf+=$'\n'
+
+  local _maxw=$(( W - 12 )); [[ $_maxw -lt 6 ]] && _maxw=6
+
+  # Window name
+  local _wn_disp="${_INFO_WNAME:0:$_maxw}"
+  [[ ${#_INFO_WNAME} -gt $_maxw ]] && _wn_disp="${_INFO_WNAME:0:$(( _maxw - 1 ))}…"
+  buf+=" ${GR}window ${R} ${WH}${_wn_disp}${R}"$'\n'
+
+  # Status
+  local _slabel _scol
+  case "$_INFO_STATUS" in
+    W) _slabel="working"; _scol="$CY" ;;
+    I) _slabel="idle";    _scol="$GR" ;;
+    P) _slabel="blocked"; _scol="$RD" ;;
+    L) _slabel="loop";    _scol="$YL" ;;
+    X) _slabel="crashed"; _scol="$RD" ;;
+    *) _slabel="empty";   _scol="$GR" ;;
+  esac
+  buf+=" ${GR}status ${R} ${_scol}${_slabel}${R}"$'\n'
+  buf+=$'\n'
+
+  # Project
+  if [[ -n "$_INFO_PROJECT" ]]; then
+    local _proj_disp="${_INFO_PROJECT:0:$_maxw}"
+    [[ ${#_INFO_PROJECT} -gt $_maxw ]] && _proj_disp="${_INFO_PROJECT:0:$(( _maxw - 1 ))}…"
+    buf+=" ${GR}project${R} ${WH}${_proj_disp}${R}"$'\n'
+  fi
+
+  # Branch
+  if [[ -n "$_INFO_BRANCH" ]]; then
+    local _br_disp="${_INFO_BRANCH:0:$_maxw}"
+    [[ ${#_INFO_BRANCH} -gt $_maxw ]] && _br_disp="${_INFO_BRANCH:0:$(( _maxw - 1 ))}…"
+    buf+=" ${GR}branch ${R} ${WH}${_br_disp}${R}"$'\n'
+  fi
+
+  # PR
+  if [[ -n "$_INFO_PR_URL" ]]; then
+    local _pr_disp="${_INFO_PR_URL:0:$_maxw}"
+    [[ ${#_INFO_PR_URL} -gt $_maxw ]] && _pr_disp="${_INFO_PR_URL:0:$(( _maxw - 1 ))}…"
+    buf+=" ${GR}pr     ${R} ${CY}${_pr_disp}${R}"$'\n'
+  fi
+
+  # Agent sigla
+  if [[ -n "$_INFO_AGENT" ]]; then
+    buf+=" ${GR}agent  ${R} ${PU}${_INFO_AGENT}${R}"$'\n'
+  fi
+
+  buf+=$'\n'
+  buf+="${GR}${sep}${R}"$'\n'
+  buf+="${GR} [i] or [Esc] to close${R}"$'\n'
   printf '\033[H\033[J%s' "$buf"
 }
 
 # ── Render ────────────────────────────────────────────────────────────────────
 render() {
   [[ "$_HELP_MODE" -eq 1 ]] && { render_help; return; }
+  [[ "$_INFO_MODE"  -eq 1 ]] && { render_info; return; }
   [[ ! -f "$DATA_FILE" ]] && return
 
   (( _SPIN_FRAME = (_SPIN_FRAME + 1) % 10 ))
@@ -62,8 +199,9 @@ render() {
   fi
 
   # Resolver sesión y ventana activa del outer server en este ciclo de render
-  local _outer_sess _outer_win
+  # _outer_sess and _outer_win are globals so render_window_row can read them
   _outer_sess=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+  _outer_win=""
   local _df_mtime; _df_mtime=$(file_mtime "$DATA_FILE")
   local _search_fast_path=0
   [[ "$_SEARCH_MODE" == "1" && "$_df_mtime" == "$_RENDER_DATA_MTIME" && ${#ITEMS_FLAT[@]} -gt 0 ]] && _search_fast_path=1
@@ -76,12 +214,15 @@ render() {
       | awk -F'|' '$1=="1"{print $2; exit}')
   fi
 
-  # stty size lee TIOCGWINSZ directamente — refleja el tamaño real del pty incluso cuando
-  # $COLUMNS no se ha actualizado aún (bash solo lo actualiza tras comandos externos, no read).
+  # _CURRENT_W/_CURRENT_H se actualizan en sidebar.sh desde el pane externo (fuente de verdad)
+  # o desde stty. Son siempre más frescos que llamar stty aquí porque se sincronizan antes de
+  # que SIGWINCH propague. stty es el fallback cuando los globales aún no están inicializados.
   local _sz W H
   _sz=$(stty size 2>/dev/null)
   W="${_sz##* }"; [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"; [[ "$W" -lt 4 ]] && W=28
   H="${_sz%% *}"; [[ ! "$H" =~ ^[0-9]+$ || "$H" -lt 4 ]] && H="${LINES:-24}";   [[ "$H" -lt 4 ]] && H=24
+  [[ "${_CURRENT_W:-0}" -ge 4 ]] && W="$_CURRENT_W"
+  [[ "${_CURRENT_H:-0}" -ge 4 ]] && H="$_CURRENT_H"
   # Persiste el ancho actual por servidor para que nuevas ventanas abran al mismo ancho.
   # Durante drag activo (SIGWINCH) sincronizar todos los panes sidebar para evitar que
   # el servidor rebote entre anchos de distintos clientes.
@@ -92,16 +233,8 @@ render() {
   if [[ "$W" != "$_sw" ]]; then
     printf '%s' "$W" > "$_width_f"
     printf '%s' "$W" > "${STATE_DIR}/sidebar_width"
-    if [[ "$_RESIZE" == "1" ]]; then
-      _RESIZE=0
-      "${OUTER_TMUX[@]}" list-panes -a -F '#{pane_id}|#{pane_title}|#{pane_width}' 2>/dev/null \
-        | while IFS='|' read -r _spid _spt _spw; do
-            [[ "$_spt" == "Sessions" && "$_spw" != "$W" ]] && \
-              "${OUTER_TMUX[@]}" resize-pane -t "$_spid" -x "$W" 2>/dev/null
-          done
-    fi
   fi
-  local max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
+  max=$(( W - 6 )); [[ $max -lt 6 ]] && max=6
   local sep; sep=$(printf '─%.0s' $(seq 1 $W))
 
   if [[ "$_search_fast_path" == "0" ]]; then
@@ -127,32 +260,46 @@ render() {
       for _s in "${SESSIONS_FLAT[@]}"; do [[ "$_d" == "$_s" ]] && { _found=true; break; }; done
       [[ "$_found" == false ]] && SESSIONS_FLAT+=("$_d")
     done
-  elif [[ ${#_data_sess[@]} -ne ${#SESSIONS_FLAT[@]} ]]; then
-    local _merged=() _e _d _found
-    for _e in "${SESSIONS_FLAT[@]}"; do
-      _found=false
-      for _d in "${_data_sess[@]}"; do [[ "$_e" == "$_d" ]] && { _found=true; break; }; done
-      [[ "$_found" == true ]] && _merged+=("$_e")
-    done
-    for _d in "${_data_sess[@]}"; do
-      _found=false
-      for _e in "${_merged[@]}"; do [[ "$_d" == "$_e" ]] && { _found=true; break; }; done
-      [[ "$_found" == false ]] && _merged+=("$_d")
-    done
-    SESSIONS_FLAT=("${_merged[@]}")
+  else
+    # Merge cuando hay diferencia de count O de contenido (sesión reemplazada con mismo count)
+    local _needs_merge=0
+    [[ ${#_data_sess[@]} -ne ${#SESSIONS_FLAT[@]} ]] && _needs_merge=1
+    if [[ "$_needs_merge" -eq 0 ]]; then
+      local _e _d _found
+      for _e in "${SESSIONS_FLAT[@]}"; do
+        _found=false
+        for _d in "${_data_sess[@]}"; do [[ "$_e" == "$_d" ]] && { _found=true; break; }; done
+        [[ "$_found" == false ]] && { _needs_merge=1; break; }
+      done
+    fi
+    if [[ "$_needs_merge" -eq 1 ]]; then
+      local _merged=() _e _d _found
+      for _e in "${SESSIONS_FLAT[@]}"; do
+        _found=false
+        for _d in "${_data_sess[@]}"; do [[ "$_e" == "$_d" ]] && { _found=true; break; }; done
+        [[ "$_found" == true ]] && _merged+=("$_e")
+      done
+      for _d in "${_data_sess[@]}"; do
+        _found=false
+        for _e in "${_merged[@]}"; do [[ "$_d" == "$_e" ]] && { _found=true; break; }; done
+        [[ "$_found" == false ]] && _merged+=("$_d")
+      done
+      SESSIONS_FLAT=("${_merged[@]}")
+    fi
   fi
+  [[ "$SORT_MODE" == "alpha" ]] && _sessions_sort_alpha
 
   # ── Pre-leer DATA_FILE en arrays asociativos (bash 4) ────────────────────
   _win_keys=()
   _srv_cur=()
   _sess_act=()
   _win_meta=()
-  while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6 _f7; do
+  while IFS='|' read -r _t _f1 _f2 _f3 _f4 _f5 _f6 _f7 _f8; do
     case "$_t" in
       S) _srv_cur["$_f1"]="$_f2" ;;
       E) _sess_act["${_f1}|${_f2}"]="$_f3" ;;
       W) _win_keys+=("${_f1}|${_f2}|${_f3}")
-         _win_meta["${_f1}|${_f2}|${_f3}"]="${_f4}|${_f5}|${_f6}|${_f7}" ;;
+         _win_meta["${_f1}|${_f2}|${_f3}"]="${_f4}|${_f5}|${_f6}|${_f7}|${_f8}" ;;
     esac
   done < "$DATA_FILE"
   _RENDER_DATA_MTIME="$_df_mtime"
@@ -176,23 +323,20 @@ render() {
       [[ "$_wk_srv" == "$_srv" && "$_wk_sess" == "$_sess" ]] && _data_wins+=("$_wk_widx")
     done
     [[ ${#_data_wins[@]} -eq 0 ]] && continue
+    [[ "$SORT_MODE" == "alpha" ]] && _windows_sort_alpha "$_srv" "$_sess" _data_wins
 
     # Ventanas ya en ITEMS_FLAT (orden del usuario, puede diferir de DATA_FILE)
     local _old_wins=()
     local _oi _or _osrv _or2 _osess _owid
     for _oi in "${_old_items[@]}"; do
       [[ "${_oi%%|*}" != "W" ]] && continue
-      _or="${_oi#*|}"
-      _osrv="${_or%%|*}"
-      _or2="${_or#*|}"
-      _osess="${_or2%%|*}"
-      _owid="${_or2#*|}"
+      _or="${_oi#*|}"; _osrv="${_or%%|*}"; _or2="${_or#*|}"; _osess="${_or2%%|*}"; _owid="${_or2#*|}"
       [[ "$_osrv" == "$_srv" && "$_osess" == "$_sess" ]] && _old_wins+=("$_owid")
     done
 
     # Si el conteo es igual: preservar orden existente; si cambió: merge
     local _wins=()
-    if [[ ${#_old_wins[@]} -eq ${#_data_wins[@]} && ${#_old_wins[@]} -gt 0 ]]; then
+    if [[ "$SORT_MODE" != "alpha" && ${#_old_wins[@]} -eq ${#_data_wins[@]} && ${#_old_wins[@]} -gt 0 ]]; then
       _wins=("${_old_wins[@]}")
     elif [[ ${#_old_wins[@]} -gt 0 ]]; then
       local _ow _dw _found
@@ -243,7 +387,7 @@ render() {
   [[ $SELECTED -ge ${#ITEMS_FLAT[@]} ]] && SELECTED=$(( ${#ITEMS_FLAT[@]} - 1 ))
   [[ $SELECTED -lt 0 ]] && SELECTED=0
 
-  local _cur_sess="${_outer_sess:-}"
+  _cur_sess="${_outer_sess:-}"
 
   # ── Precalcular conteos para el footer de estado ─────────────────────────
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _pc=0 _lc=0 _xc=0
@@ -253,14 +397,14 @@ render() {
     local _wi2="${_wmeta2#*|}"  # skip name field
     _wi2="${_wi2%%|*}"          # extract icon field
     case "$_wi2" in
-      "W") (( _wc++ )); _HAS_WORKING=1 ;;
-      "I") (( _ic_raw++ )) ;;
-      "E") (( _ec++ )) ;;
-      "P") (( _pc++ )) ;;
-      "L") (( _lc++ )); _HAS_WORKING=1 ;;
-      "X") (( _xc++ )) ;;
+      "$STATE_WORKING") (( _wc++ )); _HAS_WORKING=1 ;;
+      "$STATE_IDLE")    (( _ic_raw++ )) ;;
+      "$STATE_EMPTY")   (( _ec++ )) ;;
+      "$STATE_BLOCKED") (( _pc++ )) ;;
+      "$STATE_LOOP")    (( _lc++ )); _HAS_WORKING=1 ;;
+      "$STATE_CRASHED") (( _xc++ )) ;;
     esac
-    if [[ "$_wi2" != "E" ]]; then
+    if [[ "$_wi2" != "$STATE_EMPTY" ]]; then
       local _uk2="${_wk2//[^a-zA-Z0-9_-]/_}"
       _uk2="${_uk2//|/_}"
       [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && (( _uc++ ))
@@ -334,12 +478,12 @@ render() {
 
     printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
     mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
-    printf '\033[H\033[J%s' "$buf"
+    _diff_print "$buf" "$W" "$H" "search"
     return
   fi
 
   # Detectar sesión padre del cursor (para resaltado blanco en modo ventana)
-  local _cursor_parent_item=""
+  _cursor_parent_item=""
   if [[ "${ITEMS_FLAT[$SELECTED]%%|*}" == "W" ]]; then
     local _cpi=$SELECTED
     while (( _cpi > 0 )); do
@@ -351,7 +495,7 @@ render() {
   fi
 
   # ── Drill-down mode: "N." o "N.M" en el buffer → mostrar solo esa sesión ──
-  local _drill_mode=0 _drill_snum=0 _drill_wnum="" _in_drill_sess=0 _win_ord=0
+  _drill_mode=0; _drill_snum=0; _drill_wnum=""; _in_drill_sess=0; _win_ord=0
   if [[ "$_CMD_BUF" =~ ^:?([0-9]+)\.([0-9]*)$ ]]; then
     _drill_mode=1
     _drill_snum="${BASH_REMATCH[1]}"
@@ -359,7 +503,7 @@ render() {
   fi
 
   # ── Construir buffer de display ───────────────────────────────────────────
-  local buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
+  buf="" mapbuf="" prev_server="" _sess_num=0 _ii=0
 
   # Mode indicator: [NAV] | [CMD] <buffer> | [SRCH] <query>
   local _mode_label _hdr_text _hdr_len _pad_len _hdr_spaces
@@ -394,6 +538,7 @@ render() {
     if [[ -n "$_FILTER_STATUS" ]]; then
       buf+="${YL}  ⟨filter: ${_FILTER_STATUS}⟩${GR} [ESC]clear${R}"$'\n'; mapbuf+=$'\n'
     fi
+    [[ "$SORT_MODE" == "alpha" ]] && { buf+="${CY}  ⟨sort: α⟩${GR} [a]toggle${R}"$'\n'; mapbuf+=$'\n'; }
   fi
   buf+="${GR}${sep}${R}"$'\n'; mapbuf+=$'\n'
 
@@ -404,15 +549,15 @@ render() {
     for _fk in "${_win_keys[@]}"; do
       local _fmeta="${_win_meta[$_fk]:-}"
       local _fk_srv="${_fk%%|*}" _fk_rest="${_fk#*|}"
-      local _fk_sess="${_fk_rest%%|*}" _fk_widx="${_fk_rest#*|}"
-      # icon is second field of meta: name|icon|agent|last
+      local _fk_sess="${_fk_rest%%|*}"
       local _fk_icon; _fk_icon=$(printf '%s' "$_fmeta" | cut -d'|' -f2)
+      local _fk_widx="${_fk_rest#*|}"
       local _fmatch=0
       case "$_FILTER_STATUS" in
-        working) [[ "$_fk_icon" == "W" || "$_fk_icon" == "L" ]] && _fmatch=1 ;;
+        working) [[ "$_fk_icon" == "$STATE_WORKING" || "$_fk_icon" == "$STATE_LOOP" ]] && _fmatch=1 ;;
         idle)
           local _fkey2="${_fk//[^a-zA-Z0-9_-|]/_}"; _fkey2="${_fkey2//|/_}"
-          [[ "$_fk_icon" != "E" && "$_fk_icon" != "W" && "$_fk_icon" != "L" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
+          [[ "$_fk_icon" != "$STATE_EMPTY" && "$_fk_icon" != "$STATE_WORKING" && "$_fk_icon" != "$STATE_LOOP" && ! -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
         unread)
           local _fkey2="${_fk//[^a-zA-Z0-9_-|]/_}"; _fkey2="${_fkey2//|/_}"
           [[ -f "${STATE_DIR}/${_fkey2}.unread" ]] && _fmatch=1 ;;
@@ -421,20 +566,21 @@ render() {
     done
   fi
 
+  # ── Main display loop ─────────────────────────────────────────────────────
+  local _item
   for _item in "${ITEMS_FLAT[@]}"; do
     local _itype="${_item%%|*}" _irest="${_item#*|}"
 
     if [[ "$_itype" == "S" ]]; then
       local _srv="${_irest%%|*}" _sess="${_irest#*|}"
-
       (( _sess_num++ ))
 
-      # Filtro de estado: saltar sesiones sin ventanas matching
+      # Filter: skip sessions with no matching windows
       if [[ -n "$_FILTER_STATUS" && "$_filt_skeys" != *" ${_srv}|${_sess}"* ]]; then
         (( _ii++ )); continue
       fi
 
-      # En drill-down: saltar sesiones que no coinciden
+      # Drill-down: skip sessions that don't match; update drill state
       if [[ "$_drill_mode" == "1" ]]; then
         if [[ $_sess_num -ne $_drill_snum ]]; then
           _in_drill_sess=0; (( _ii++ )); continue
@@ -442,47 +588,10 @@ render() {
         _in_drill_sess=1; _win_ord=0
       fi
 
-      # Header de servidor si cambia (solo en modo normal)
-      if [[ "$_srv" != "$prev_server" ]]; then
-        if [[ "$_drill_mode" == "0" ]]; then
-          [[ -n "$prev_server" ]] && { buf+=$'\n'; mapbuf+=$'\n'; }
-          local _is_cur="${_srv_cur[$_srv]:-0}"
-          local _sic="$GR"; [[ "$_is_cur" == "1" ]] && _sic="$CY"
-          local _srvd="${_srv:0:$max}"; [[ ${#_srv} -gt $max ]] && _srvd="${_srv:0:$(( max-1 ))}…"
-          local _fill_len=$(( W - 4 - ${#_srvd} ))
-          local _fill=""
-          [[ $_fill_len -gt 0 ]] && _fill=$(printf '─%.0s' $(seq 1 $_fill_len))
-          buf+="${_sic}── ${_srvd} ${_fill}${R}"$'\n'; mapbuf+=$'\n'
-        fi
-        prev_server="$_srv"
-      fi
-
-      # ▶ indica la sesión que el cliente está viendo
-      local _is_act=0
-      if [[ "$_srv" == "$OUTER_SERVER" ]]; then
-        [[ "$_sess" == "$_cur_sess" ]] && _is_act=1
-      else
-        _is_act="${_sess_act["${_srv}|${_sess}"]:-0}"
-      fi
-
-      local _cursor=" " _ic="$GR" _nc=""
-      [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && { _cursor="›"; _ic="$YL"; }
-      if [[ "$_is_act" == "1" ]]; then
-        _cursor="▶"; _nc="$BG"
-        [[ $_ii -eq $SELECTED ]] && _ic="$YL" || _ic="$BG"
-      fi
-      [[ -n "$_cursor_parent_item" && "$_item" == "$_cursor_parent_item" ]] && _nc="$WH"
-      [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]] && { _ic="$RD"; _nc="$RD"; _cursor="✕"; }
-      local _sessd="${_sess:0:$max}"; [[ ${#_sess} -gt $max ]] && _sessd="${_sess:0:$(( max-1 ))}…"
-      if [[ "$_drill_mode" == "1" ]]; then
-        buf+="${_ic}${_cursor} ${R}  ${_nc}${_sessd}${R}"$'\n'
-      else
-        buf+="${_ic}${_cursor} ${_sess_num}${R}  ${_nc}${_sessd}${R}"$'\n'
-      fi
-      mapbuf+="${_srv}|${_sess}"$'\n'
+      render_session_row "$_item" "$_srv" "$_sess"
 
     elif [[ "$_itype" == "W" ]]; then
-      # En drill-down: saltar ventanas de sesiones que no son la drill
+      # Drill-down: skip windows outside the drill session
       if [[ "$_drill_mode" == "1" && "$_in_drill_sess" == "0" ]]; then
         (( _ii++ )); continue
       fi
@@ -491,98 +600,21 @@ render() {
       local _srv="${_irest%%|*}" _wrest="${_irest#*|}"
       local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
 
-      # Lookup O(1) via array asociativo
-      local _wmeta="${_win_meta["${_srv}|${_sess}|${_widx}"]:-}"
-      local _wname _wicon _wagent _islast
-      IFS='|' read -r _wname _wicon _wagent _islast <<< "$_wmeta"
-      [[ -z "$_wicon" ]] && _wicon="E"
-      [[ -z "$_islast" ]] && _islast="1"
-
-      # Filtro de estado: saltar ventanas que no coinciden
+      # Filter: skip windows that don't match
       if [[ -n "$_FILTER_STATUS" ]]; then
+        local _fwmeta="${_win_meta["${_srv}|${_sess}|${_widx}"]:-}"
         local _fwkey="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
+        local _fwicon; _fwicon=$(printf '%s' "$_fwmeta" | cut -d'|' -f2)
         local _fwmatch=0
         case "$_FILTER_STATUS" in
-          working) [[ "$_wicon" == "W" || "$_wicon" == "L" ]] && _fwmatch=1 ;;
-          idle)    [[ "$_wicon" != "E" && "$_wicon" != "W" && "$_wicon" != "L" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
+          working) [[ "$_fwicon" == "$STATE_WORKING" || "$_fwicon" == "$STATE_LOOP" ]] && _fwmatch=1 ;;
+          idle)    [[ "$_fwicon" != "$STATE_EMPTY" && "$_fwicon" != "$STATE_WORKING" && "$_fwicon" != "$STATE_LOOP" && ! -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
           unread)  [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
         [[ "$_fwmatch" == "0" ]] && { (( _ii++ )); continue; }
       fi
 
-      # ── Unread tracking ──────────────────────────────────────────────────────
-      local _key="${_srv//[^a-zA-Z0-9_-]/_}_${_sess//[^a-zA-Z0-9_-]/_}_${_widx}"
-      local _flag_f="${STATE_DIR}/${_key}.unread" _prev_f="${STATE_DIR}/${_key}.prev_icon"
-
-      local _state
-      case "$_wicon" in
-        "E") _state="empty" ;;
-        "W") _state="working"; _HAS_WORKING=1 ;;
-        "P") _state="blocked" ;;
-        "L") _state="loop";    _HAS_WORKING=1 ;;
-        "X") _state="crashed" ;;
-        *)   _state="idle" ;;
-      esac
-
-      if [[ "$_state" == "empty" ]]; then
-        rm -f "$_flag_f" "$_prev_f"
-      elif [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
-        rm -f "$_flag_f"; printf '💤' > "$_prev_f"
-      else
-        local _pi=""; [[ -f "$_prev_f" ]] && _pi=$(<"$_prev_f")
-        [[ "$_pi" == "W" && ( "$_state" == "idle" || "$_state" == "blocked" || "$_state" == "loop" ) ]] && touch "$_flag_f"
-        [[ "$_state" == "working" ]] && rm -f "$_flag_f"
-        printf '%s' "$_wicon" > "$_prev_f"
-        [[ -f "$_flag_f" && "$_state" != "working" ]] && _state="unread"
-      fi
-
-      # Seleccionar icono y colores según estado
-      local _display_icon _icon_col _name_col
-      case "$_state" in
-        empty)   _display_icon="·";                          _icon_col="$GR"; _name_col="$GR" ;;
-        idle)    _display_icon="○";                          _icon_col="$GR"; _name_col="$GR" ;;
-        working) _display_icon="${_SPINNER[$_SPIN_FRAME]}";  _icon_col="$CY"; _name_col="$CY" ;;
-        blocked) _display_icon="?";                          _icon_col="$RD"; _name_col="$RD" ;;
-        loop)    _display_icon="↺";                          _icon_col="$YL"; _name_col="$YL" ;;
-        crashed) _display_icon="✗";                          _icon_col="$RD"; _name_col="$GR" ;;
-        unread)  _display_icon="◉";                          _icon_col="$YL"; _name_col="$YL" ;;
-      esac
-      local _agent_badge=""
-      [[ -n "$_wagent" ]] && _agent_badge="[${_wagent}] "
-
-      local _br='└─'; [[ "$_islast" != "1" ]] && _br='├─'
-      local _wpfx
-      if [[ "$_drill_mode" == "1" ]]; then
-        if [[ $_ii -eq $SELECTED ]]; then
-          _wpfx="${YL}${_win_ord}▸${R}"
-        elif [[ -n "$_drill_wnum" && "$_win_ord" -eq "$_drill_wnum" ]]; then
-          _wpfx="${WH}${_win_ord} ${R}"
-        else
-          _wpfx="${GR}${_win_ord} ${R}"
-        fi
-      else
-        _wpfx="  "; [[ $_ii -eq $SELECTED && -z "$_CMD_BUF" ]] && _wpfx=" ${YL}▸${R}"
-      fi
-
-      local _maxn=$(( max - 3 - ${#_agent_badge} )) _wdisp
-      [[ $_maxn -lt 4 ]] && _maxn=4
-      if [[ ${#_wname} -gt $_maxn ]]; then
-        _wdisp="${_wname:0:$(( _maxn - 1 ))}…"
-      else
-        _wdisp="${_wname:0:$_maxn}"
-      fi
-
-      local _badge_col="${PU}"
-      if [[ -n "$_KILL_PENDING" && "$_item" == "$_KILL_PENDING" ]]; then
-        buf+="${_wpfx}${RD}${_br}${R} ${RD}✕${R} ${RD}${_agent_badge}${_wdisp}${R}"$'\n'
-      elif [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_outer_sess" && "$_widx" == "$_outer_win" ]]; then
-        local _active_icon_col="$G"
-        [[ "$_state" == "working" ]] && _active_icon_col="$CY"
-        buf+="${_wpfx}${G}${_br}${R} ${_active_icon_col}${_display_icon}${R} ${_badge_col}${_agent_badge}${R}${G}${_wdisp}${R}"$'\n'
-      else
-        buf+="${_wpfx}${GR}${_br}${R} ${_icon_col}${_display_icon}${R} ${_badge_col}${_agent_badge}${R}${_name_col}${_wdisp}${R}"$'\n'
-      fi
-      mapbuf+="${_srv}|${_sess}|${_widx}"$'\n'
+      render_window_row "$_item" "$_srv" "$_sess" "$_widx"
     fi
 
     (( _ii++ ))
@@ -630,5 +662,5 @@ render() {
 
   printf '%s' "$mapbuf" > "${STATE_DIR}/rowmap.tmp"
   mv "${STATE_DIR}/rowmap.tmp" "${STATE_DIR}/rowmap"
-  printf '\033[H\033[J%s' "$buf"
+  _diff_print "$buf" "$W" "$H" "main"
 }

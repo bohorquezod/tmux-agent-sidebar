@@ -27,7 +27,9 @@ Shared code extracted from daemon and sidebar into sourced modules (no shebang â
 | `lib/detect.sh`      | `detect_icon`, `effective_claude_pid`, `agent_sigla`, `check_loop`                      |
 | `lib/nav.sh`         | `jump_to`, `jump_next_working`, `jump_next_unread`, `_resolve_ordinal`                  |
 | `lib/ops.sh`         | `save_session_order`, `move_session_up/down`, `move_window_up/down`, `_kill_current`, `_apply_rename` |
-| `lib/render.sh`      | `render`, `render_help`, `file_mtime`                                                   |
+| `lib/render-icons.sh`  | `icon_to_char`, `icon_to_color`, `spinner_frame`                                      |
+| `lib/render-row.sh`    | `render_session_row`, `render_window_row`                                             |
+| `lib/render.sh`        | `render`, `render_help`, `file_mtime`                                                 |
 | `lib/cmd.sh`         | `_exec_cmd`, `_cmd_hint`                                                                |
 | `lib/sidebar-utils.sh` | `_ensure_sidebar`, `_kill_extra_sidebars`, `_start_animator`, `_sidebar_cleanup`      |
 
