@@ -1,0 +1,21 @@
+scripts/sidebar.sh
+  s_9fb1b8bbad87df::t_8d7d5eecff904d 625
+tests/e2e-states.sh
+  s_9fb1b8bbad87df::t_8d7d5eecff904d 376-382,384-389
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0cb35e62c406d20a51e4be0c5f72a8705869ff01",
+  "prompts": {},
+  "sessions": {
+    "s_9fb1b8bbad87df": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2b3b8fc-ca88-433b-95e6-72f5f94412ab",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
