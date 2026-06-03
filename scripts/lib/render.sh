@@ -91,7 +91,7 @@ _diff_print() {
 # ── Help overlay ─────────────────────────────────────────────────────────────
 render_help() {
   local _sz W H
-  _sz=$(stty size 2>/dev/null)
+  _sz=$(stty size 2>/dev/null) || true
   W="${_sz##* }"
   [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"
   [[ "$W" -lt 4 ]] && W=28
@@ -138,7 +138,7 @@ render_help() {
 # ── Info overlay ─────────────────────────────────────────────────────────────
 render_info() {
   local _sz W
-  _sz=$(stty size 2>/dev/null)
+  _sz=$(stty size 2>/dev/null) || true
   W="${_sz##* }"
   [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"
   [[ "$W" -lt 4 ]] && W=28
@@ -265,7 +265,7 @@ render() {
   # o desde stty. Son siempre más frescos que llamar stty aquí porque se sincronizan antes de
   # que SIGWINCH propague. stty es el fallback cuando los globales aún no están inicializados.
   local _sz W H
-  _sz=$(stty size 2>/dev/null)
+  _sz=$(stty size 2>/dev/null) || true
   W="${_sz##* }"
   [[ ! "$W" =~ ^[0-9]+$ || "$W" -lt 4 ]] && W="${COLUMNS:-28}"
   [[ "$W" -lt 4 ]] && W=28
@@ -281,7 +281,7 @@ render() {
   local _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
   [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
   local _sw
-  _sw=$(cat "$_width_f" 2>/dev/null)
+  _sw=$(cat "$_width_f" 2>/dev/null) || true
   if [[ "$W" != "$_sw" ]]; then
     printf '%s' "$W" >"$_width_f"
     printf '%s' "$W" >"${STATE_DIR}/sidebar_width"
@@ -460,7 +460,7 @@ render() {
             break
           }
         fi
-        ((_ini++))
+        ((_ini++)) || true
       done
     fi
 
@@ -473,7 +473,7 @@ render() {
           _cfound=true
           break
         }
-        ((_ci++))
+        ((_ci++)) || true
       done
       CURSOR_ITEM=""
     fi
@@ -492,22 +492,22 @@ render() {
     _wi2="${_wi2%%|*}"         # extract icon field
     case "$_wi2" in
       "$STATE_WORKING")
-        ((_wc++))
+        ((_wc++)) || true
         _HAS_WORKING=1
         ;;
-      "$STATE_IDLE") ((_ic_raw++)) ;;
-      "$STATE_EMPTY") ((_ec++)) ;;
-      "$STATE_BLOCKED") ((_pc++)) ;;
+      "$STATE_IDLE") ((_ic_raw++)) || true ;;
+      "$STATE_EMPTY") ((_ec++)) || true ;;
+      "$STATE_BLOCKED") ((_pc++)) || true ;;
       "$STATE_LOOP")
-        ((_lc++))
+        ((_lc++)) || true
         _HAS_WORKING=1
         ;;
-      "$STATE_CRASHED") ((_xc++)) ;;
+      "$STATE_CRASHED") ((_xc++)) || true ;;
     esac
     if [[ "$_wi2" != "$STATE_EMPTY" ]]; then
       local _uk2="${_wk2//[^a-zA-Z0-9_-]/_}"
       _uk2="${_uk2//|/_}"
-      [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && ((_uc++))
+      [[ -f "${STATE_DIR}/${_uk2}.unread" ]] && ((_uc++)) || true
     fi
   done
 
@@ -573,7 +573,7 @@ render() {
           buf+="${_fc}${_fcur}   ${_wdisp2}${R}"$'\n'
           mapbuf+="${_fsrv2}|${_fss2}|${_fwid2}"$'\n'
         fi
-        ((_si2++))
+        ((_si2++)) || true
       done
     fi
 
@@ -596,7 +596,7 @@ render() {
   if [[ "${ITEMS_FLAT[$SELECTED]%%|*}" == "W" ]]; then
     local _cpi=$SELECTED
     while ((_cpi > 0)); do
-      ((_cpi--))
+      ((_cpi--)) || true
       if [[ "${ITEMS_FLAT[$_cpi]%%|*}" == "S" ]]; then
         _cursor_parent_item="${ITEMS_FLAT[$_cpi]}"
         break
@@ -699,11 +699,11 @@ render() {
 
     if [[ "$_itype" == "S" ]]; then
       local _srv="${_irest%%|*}" _sess="${_irest#*|}"
-      ((_sess_num++))
+      ((_sess_num++)) || true
 
       # Filter: skip sessions with no matching windows
       if [[ -n "$_FILTER_STATUS" && "$_filt_skeys" != *" ${_srv}|${_sess}"* ]]; then
-        ((_ii++))
+        ((_ii++)) || true
         continue
       fi
 
@@ -711,7 +711,7 @@ render() {
       if [[ "$_drill_mode" == "1" ]]; then
         if [[ $_sess_num -ne $_drill_snum ]]; then
           _in_drill_sess=0
-          ((_ii++))
+          ((_ii++)) || true
           continue
         fi
         _in_drill_sess=1
@@ -723,10 +723,10 @@ render() {
     elif [[ "$_itype" == "W" ]]; then
       # Drill-down: skip windows outside the drill session
       if [[ "$_drill_mode" == "1" && "$_in_drill_sess" == "0" ]]; then
-        ((_ii++))
+        ((_ii++)) || true
         continue
       fi
-      ((_win_ord++))
+      ((_win_ord++)) || true
 
       local _srv="${_irest%%|*}" _wrest="${_irest#*|}"
       local _sess="${_wrest%%|*}" _widx="${_wrest#*|}"
@@ -744,7 +744,7 @@ render() {
           unread) [[ -f "${STATE_DIR}/${_fwkey}.unread" ]] && _fwmatch=1 ;;
         esac
         [[ "$_fwmatch" == "0" ]] && {
-          ((_ii++))
+          ((_ii++)) || true
           continue
         }
       fi
@@ -752,7 +752,7 @@ render() {
       render_window_row "$_item" "$_srv" "$_sess" "$_widx"
     fi
 
-    ((_ii++))
+    ((_ii++)) || true
   done
 
   [[ -n "$prev_server" ]] && {
