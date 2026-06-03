@@ -1,0 +1,41 @@
+scripts/track-session.sh
+  s_5e540792d06ab3::t_5f418380541bcd 2
+scripts/sidebar.sh
+  s_5e540792d06ab3::t_3264a8f39effba 10-13
+scripts/server-start.sh
+  s_5e540792d06ab3::t_0ae0983b12ed74 42
+  s_5e540792d06ab3::t_43663bedb16c2f 2
+scripts/daemon.sh
+  s_5e540792d06ab3::t_18c9de001507dc 10
+scripts/lib/nav.sh
+  s_5e540792d06ab3::t_c7d474aa2d57fb 72-73,83-84
+scripts/reload-all.sh
+  s_5e540792d06ab3::t_fffd0abd3971b1 2
+  s_5e540792d06ab3::t_edd6868d41f6ce 11,15-16
+scripts/toggle.sh
+  s_5e540792d06ab3::t_daad8e5df0ecdc 43
+  s_5e540792d06ab3::t_93d7c19429e777 2
+tests/helpers/common.bash
+  s_5e540792d06ab3::t_ef50ef9cd76fc0 29-35
+scripts/popup.sh
+  s_5e540792d06ab3::t_1f0fa332d99cf2 2
+scripts/click.sh
+  s_5e540792d06ab3::t_edcb16d8437c97 2
+  s_5e540792d06ab3::t_f5ba08134a473a 109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cc2cca4f9b8b90760b3e5f5db104f3dc47ad9828",
+  "prompts": {},
+  "sessions": {
+    "s_5e540792d06ab3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be488cf3-b091-47e6-bcd0-3873a8ece2c5",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
