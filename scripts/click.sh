@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # click.sh — navega al target y abre/refresca el sidebar en destino
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -109,7 +110,7 @@ fi
 _srv_key="${CURRENT_SERVER//[^a-zA-Z0-9_-]/_}"
 _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
 [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
-SIDEBAR_W=$(cat "$_width_f" 2>/dev/null)
+SIDEBAR_W=$(cat "$_width_f" 2>/dev/null || true)
 if [[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]]; then
   SIDEBAR_W=$($TMUXBIN show-option -gqv @agent-sidebar-width 2>/dev/null)
   [[ -z "$SIDEBAR_W" || ! "$SIDEBAR_W" =~ ^[0-9]+$ ]] && SIDEBAR_W=28

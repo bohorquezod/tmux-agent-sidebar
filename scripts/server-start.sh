@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # server-start.sh — garantiza que el sidebar server tmux-agent-sidebar está corriendo
 # Idempotente: puede llamarse múltiples veces sin efecto secundario
 
@@ -44,7 +45,7 @@ if [[ ! -f "$_dpid_file" ]] || ! kill -0 "$(<"$_dpid_file")" 2>/dev/null; then
   _i=0
   while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do
     sleep 0.1
-    ((_i++))
+    ((_i++)) || true
   done
 fi
 
@@ -56,7 +57,7 @@ OUTER_SERVER="${OUTER_SOCKET##*/}"
 _srv_key="${OUTER_SERVER//[^a-zA-Z0-9_-]/_}"
 _width_f="${STATE_DIR}/sidebar_width_${_srv_key}"
 [[ ! -f "$_width_f" && -f "${STATE_DIR}/sidebar_width" ]] && cp "${STATE_DIR}/sidebar_width" "$_width_f"
-WIDTH=$(cat "$_width_f" 2>/dev/null)
+WIDTH=$(cat "$_width_f" 2>/dev/null || true)
 if [[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]]; then
   WIDTH=$($TMUXBIN show-option -gqv @agent-sidebar-width 2>/dev/null)
   [[ -z "$WIDTH" || ! "$WIDTH" =~ ^[0-9]+$ ]] && WIDTH=28

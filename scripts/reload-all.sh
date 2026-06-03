@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # reload-all.sh — hard reload nuclear: mata todo y recrea desde cero (prefix + M)
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,12 +9,12 @@ STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 SERVER="tmux-agent-sidebar"
 
 # 1. Matar servidor sidebar completo (incluye sidebar.sh y animator)
-$TMUXBIN -L "$SERVER" kill-server 2>/dev/null
+$TMUXBIN -L "$SERVER" kill-server 2>/dev/null || true
 sleep 0.2
 
 # 2. Matar todos los daemons con SIGKILL (no depender del EXIT trap)
-ps aux 2>/dev/null | grep "[d]aemon.sh" | grep -v grep | awk '{print $2}' \
-  | xargs kill -9 2>/dev/null
+ps aux 2>/dev/null | grep "[d]aemon.sh" | awk '{print $2}' \
+  | xargs kill -9 2>/dev/null || true
 
 # 3. Limpiar todo el estado
 rm -f "${STATE_DIR}/daemon.pid"
