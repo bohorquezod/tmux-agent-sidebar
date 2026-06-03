@@ -3,7 +3,8 @@
 # Si la versión de tmux es anterior, hace fallback al modo split-pane.
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+TMUXBIN="$(command -v tmux 2>/dev/null)"
+[[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
 STATE_DIR="${TMPDIR:-/tmp}/agent-sidebar"
 
 # Returns 0 if the given version string satisfies tmux >= 3.3, 1 otherwise.
