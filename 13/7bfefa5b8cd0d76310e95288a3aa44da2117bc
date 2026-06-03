@@ -1,0 +1,19 @@
+scripts/lib/nav.sh
+  s_3e87751e342293::t_8bba1774bc39df 83-88,90,100,103,112,115,129-136,149-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "137bfefa5b8cd0d76310e95288a3aa44da2117bc",
+  "prompts": {},
+  "sessions": {
+    "s_3e87751e342293": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d4802a-0dc3-434b-9227-668aefa0330c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
