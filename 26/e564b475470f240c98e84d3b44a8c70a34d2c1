@@ -1,0 +1,19 @@
+scripts/daemon.sh
+  s_5b839e515a8dfe::t_7aec5feebc51da 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "26e564b475470f240c98e84d3b44a8c70a34d2c1",
+  "prompts": {},
+  "sessions": {
+    "s_5b839e515a8dfe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb597b34-fa82-4a24-8455-ba7b3a3cfd8a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
