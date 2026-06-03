@@ -9,17 +9,17 @@ _log_rotate() {
   [[ -f "$_LOG_FILE" ]] || return 0
   local _sz
   _sz=$(stat -f%z "$_LOG_FILE" 2>/dev/null || stat -c%s "$_LOG_FILE" 2>/dev/null || echo 0)
-  (( _sz > 1048576 )) && mv "$_LOG_FILE" "${_LOG_FILE}.1"
+  ((_sz > 1048576)) && mv "$_LOG_FILE" "${_LOG_FILE}.1"
 }
 
 _log_debug() {
-  (( _LOG_LEVEL >= 2 )) || return 0
-  printf '[DEBUG %s] %s\n' "$(date +%T)" "$*" >> "$_LOG_FILE"
+  ((_LOG_LEVEL >= 2)) || return 0
+  printf '[DEBUG %s] %s\n' "$(date +%T)" "$*" >>"$_LOG_FILE"
 }
 
 _log_info() {
-  (( _LOG_LEVEL >= 1 )) || return 0
-  printf '[INFO  %s] %s\n' "$(date +%T)" "$*" >> "$_LOG_FILE"
+  ((_LOG_LEVEL >= 1)) || return 0
+  printf '[INFO  %s] %s\n' "$(date +%T)" "$*" >>"$_LOG_FILE"
 }
 
 _log_warn() {

@@ -4,30 +4,32 @@
 
 # ── Reordenamiento de sesiones ────────────────────────────────────────────────
 save_session_order() {
-  > "$ORDER_FILE"
+  >"$ORDER_FILE"
   local _e
-  for _e in "${SESSIONS_FLAT[@]}"; do printf '%s\n' "$_e" >> "$ORDER_FILE"; done
+  for _e in "${SESSIONS_FLAT[@]}"; do printf '%s\n' "$_e" >>"$ORDER_FILE"; done
   touch "$DIRTY_FILE"
 }
 
 move_session_up() {
   local _idx=$1
   [[ $_idx -le 0 ]] && return
-  local _prev=$(( _idx - 1 ))
+  local _prev=$((_idx - 1))
   [[ "${SESSIONS_FLAT[$_idx]%%|*}" != "${SESSIONS_FLAT[$_prev]%%|*}" ]] && return
   local _tmp="${SESSIONS_FLAT[$_idx]}"
-  SESSIONS_FLAT[$_idx]="${SESSIONS_FLAT[$_prev]}"; SESSIONS_FLAT[$_prev]="$_tmp"
+  SESSIONS_FLAT[$_idx]="${SESSIONS_FLAT[$_prev]}"
+  SESSIONS_FLAT[$_prev]="$_tmp"
   save_session_order
 }
 
 move_session_down() {
   local _idx=$1
-  local _last=$(( ${#SESSIONS_FLAT[@]} - 1 ))
+  local _last=$((${#SESSIONS_FLAT[@]} - 1))
   [[ $_idx -ge $_last ]] && return
-  local _next=$(( _idx + 1 ))
+  local _next=$((_idx + 1))
   [[ "${SESSIONS_FLAT[$_idx]%%|*}" != "${SESSIONS_FLAT[$_next]%%|*}" ]] && return
   local _tmp="${SESSIONS_FLAT[$_idx]}"
-  SESSIONS_FLAT[$_idx]="${SESSIONS_FLAT[$_next]}"; SESSIONS_FLAT[$_next]="$_tmp"
+  SESSIONS_FLAT[$_idx]="${SESSIONS_FLAT[$_next]}"
+  SESSIONS_FLAT[$_next]="$_tmp"
   save_session_order
 }
 
@@ -35,7 +37,7 @@ move_session_down() {
 move_window_up() {
   local _idx=$1
   local _item="${ITEMS_FLAT[$_idx]}"
-  local _prev="${ITEMS_FLAT[$(( _idx - 1 ))]}"
+  local _prev="${ITEMS_FLAT[$((_idx - 1))]}"
   [[ $_idx -le 0 || "${_prev%%|*}" != "W" ]] && return
 
   # Parsear ventana actual
@@ -55,17 +57,17 @@ move_window_up() {
   "${_tmux_cmd[@]}" swap-window -s "${_csess}:${_cwin}" -t "${_psess}:${_pwin}" 2>/dev/null
 
   # Swap inmediato en ITEMS_FLAT para que el render refleje el cambio sin esperar al daemon
-  ITEMS_FLAT[$(( _idx - 1 ))]="$_item"
+  ITEMS_FLAT[$((_idx - 1))]="$_item"
   ITEMS_FLAT[$_idx]="$_prev"
-  SELECTED=$(( _idx - 1 ))
+  SELECTED=$((_idx - 1))
   touch "$DIRTY_FILE"
 }
 
 move_window_down() {
   local _idx=$1
   local _item="${ITEMS_FLAT[$_idx]}"
-  local _last=$(( ${#ITEMS_FLAT[@]} - 1 ))
-  local _next="${ITEMS_FLAT[$(( _idx + 1 ))]}"
+  local _last=$((${#ITEMS_FLAT[@]} - 1))
+  local _next="${ITEMS_FLAT[$((_idx + 1))]}"
   [[ $_idx -ge $_last || "${_next%%|*}" != "W" ]] && return
 
   # Parsear ventana actual
@@ -86,8 +88,8 @@ move_window_down() {
 
   # Swap inmediato en ITEMS_FLAT
   ITEMS_FLAT[$_idx]="$_next"
-  ITEMS_FLAT[$(( _idx + 1 ))]="$_item"
-  SELECTED=$(( _idx + 1 ))
+  ITEMS_FLAT[$((_idx + 1))]="$_item"
+  SELECTED=$((_idx + 1))
   touch "$DIRTY_FILE"
 }
 
@@ -105,26 +107,33 @@ _kill_current() {
 
     # Buscar próxima S (primero adelante, luego atrás) para reposicionar el cursor
     local _next_si=-1 _scan
-    _scan=$(( SELECTED + 1 ))
-    while (( _scan < _total )); do
-      [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && { _next_si=$_scan; break; }
-      (( _scan++ ))
+    _scan=$((SELECTED + 1))
+    while ((_scan < _total)); do
+      [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && {
+        _next_si=$_scan
+        break
+      }
+      ((_scan++))
     done
     if [[ $_next_si -lt 0 ]]; then
-      _scan=$(( SELECTED - 1 ))
-      while (( _scan >= 0 )); do
-        [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && { _next_si=$_scan; break; }
-        (( _scan-- ))
+      _scan=$((SELECTED - 1))
+      while ((_scan >= 0)); do
+        [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && {
+          _next_si=$_scan
+          break
+        }
+        ((_scan--))
       done
     fi
 
     # Si la sesión matada es la activa en el servidor externo, cambiar clientes primero
-    local _cur_active; _cur_active=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+    local _cur_active
+    _cur_active=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
     if [[ "$_srv" == "$OUTER_SERVER" && "$_sess" == "$_cur_active" && $_next_si -ge 0 ]]; then
       local _ns_rest="${ITEMS_FLAT[$_next_si]#*|}"
       local _ns_sess="${_ns_rest#*|}"
       "${OUTER_TMUX[@]}" switch-client -t "$_ns_sess" 2>/dev/null
-      printf '%s' "$_ns_sess" > "${STATE_DIR}/current_session"
+      printf '%s' "$_ns_sess" >"${STATE_DIR}/current_session"
     fi
 
     "${_tmux_cmd[@]}" kill-session -t "$_sess" 2>/dev/null
@@ -138,9 +147,12 @@ _kill_current() {
 
     # Encontrar la S padre para devolver el cursor
     local _parent_si=-1 _scan=$SELECTED
-    while (( _scan >= 0 )); do
-      [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && { _parent_si=$_scan; break; }
-      (( _scan-- ))
+    while ((_scan >= 0)); do
+      [[ "${ITEMS_FLAT[$_scan]%%|*}" == "S" ]] && {
+        _parent_si=$_scan
+        break
+      }
+      ((_scan--))
     done
 
     "${_tmux_cmd[@]}" kill-window -t "${_sess}:${_widx}" 2>/dev/null
@@ -164,12 +176,16 @@ _apply_rename() {
     # Actualizar SESSIONS_FLAT en-place para preservar el orden del usuario
     local _si2=0
     for _sf in "${SESSIONS_FLAT[@]}"; do
-      [[ "$_sf" == "${_srv}|${_old_sess}" ]] && { SESSIONS_FLAT[$_si2]="${_srv}|${_RENAME_BUF}"; break; }
-      (( ++_si2 ))
+      [[ "$_sf" == "${_srv}|${_old_sess}" ]] && {
+        SESSIONS_FLAT[$_si2]="${_srv}|${_RENAME_BUF}"
+        break
+      }
+      ((++_si2))
     done
     # Propagar a current_session si era la sesión activa
-    local _cs; _cs=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
-    [[ "$_cs" == "$_old_sess" ]] && printf '%s' "$_RENAME_BUF" > "${STATE_DIR}/current_session"
+    local _cs
+    _cs=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+    [[ "$_cs" == "$_old_sess" ]] && printf '%s' "$_RENAME_BUF" >"${STATE_DIR}/current_session"
   elif [[ "$_RENAME_TYPE" == "W" ]]; then
     local _wr="${_rest#*|}"
     local _sess="${_wr%%|*}" _wid="${_wr#*|}"

@@ -3,20 +3,24 @@
 # Idempotente: puede llamarse múltiples veces sin efecto secundario
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TMUXBIN="$(command -v tmux 2>/dev/null)"; [[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
+TMUXBIN="$(command -v tmux 2>/dev/null)"
+[[ -z "$TMUXBIN" ]] && TMUXBIN="tmux"
 
 # Localizar bash 4+ — prioriza Homebrew (Apple Silicon y Intel), luego PATH
 _find_bash4() {
   local _b
   for _b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
     if [[ -x "$_b" && "$("$_b" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]]; then
-      echo "$_b"; return
+      echo "$_b"
+      return
     fi
   done
   # Fallback: usar bash del PATH si ya es 4+
-  local _pb; _pb="$(command -v bash 2>/dev/null)"
+  local _pb
+  _pb="$(command -v bash 2>/dev/null)"
   if [[ -n "$_pb" && "$("$_pb" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]]; then
-    echo "$_pb"; return
+    echo "$_pb"
+    return
   fi
   echo ""
 }
@@ -38,7 +42,10 @@ _dpid_file="${STATE_DIR}/daemon.pid"
 if [[ ! -f "$_dpid_file" ]] || ! kill -0 "$(<"$_dpid_file")" 2>/dev/null; then
   nohup "$BASH4" "$PLUGIN_DIR/scripts/daemon.sh" >/dev/null 2>&1 &
   _i=0
-  while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do sleep 0.1; ((_i++)); done
+  while [[ ! -f "${STATE_DIR}/data" && $_i -lt 20 ]]; do
+    sleep 0.1
+    ((_i++))
+  done
 fi
 
 # 2. Si el sidebar server ya tiene la sesión activa: nada que hacer

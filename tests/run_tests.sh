@@ -9,4 +9,14 @@ if [[ -z "$BATS" ]]; then
   exit 1
 fi
 
+SHFMT="$(command -v shfmt 2>/dev/null)"
+if [[ -n "$SHFMT" ]]; then
+  printf 'shfmt check...\n'
+  if ! "$SHFMT" -i 2 -ci -bn -d "${REPO_ROOT}/scripts/" 2>&1; then
+    printf 'ERROR: shfmt check failed. Run: shfmt -i 2 -ci -bn -w scripts/\n' >&2
+    exit 1
+  fi
+  printf 'shfmt ok\n'
+fi
+
 "$BATS" "$REPO_ROOT/tests/"*.bats
