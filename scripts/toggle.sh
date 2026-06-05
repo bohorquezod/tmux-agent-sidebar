@@ -18,12 +18,13 @@ ACTIVE_PANE=$($TMUXBIN display-message -p '#{pane_id}')
 
 # Detectar sidebar por título — más confiable que STATE_FILE
 LIVE_PANE=$($TMUXBIN list-panes -t "$SESS:$WIN_IDX" \
-  -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-  | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}')
+  -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+  | awk -F'|' '$1!="1" && $3=="Sessions" && $4=="tmux" {print $2; exit}')
 
+# Muerto o zombie (vivo pero sin tmux — perdió conexión al server)
 DEAD_PANE=$($TMUXBIN list-panes -t "$SESS:$WIN_IDX" \
-  -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-  | awk -F'|' '$1=="1" && $3=="Sessions" {print $2; exit}')
+  -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+  | awk -F'|' '$3=="Sessions" && ($1=="1" || $4!="tmux") {print $2; exit}')
 
 if [[ -n "$LIVE_PANE" ]]; then
   if [[ "$ACTIVE_PANE" == "$LIVE_PANE" ]]; then

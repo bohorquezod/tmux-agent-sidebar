@@ -40,13 +40,16 @@ printf '%s' "$_hidden"   > "${STATE_DIR}/hidden_sessions"
 printf '%s' "$_interval" > "${STATE_DIR}/refresh_interval"
 
 # Registrar hooks solo una vez por servidor tmux (evita duplicados al hacer source-file)
-if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "2" ]; then
-  tmux set-option -g @claude_sidebar_hooks "2"
+if [ "$(tmux show-option -gqv @claude_sidebar_hooks)" != "3" ]; then
+  tmux set-option -g @claude_sidebar_hooks "3"
   for hook in session-created session-closed after-rename-session after-new-window window-unlinked after-rename-window; do
     tmux set-hook -ga "$hook" "run-shell 'touch \"$DIRTY_FILE\" 2>/dev/null'"
   done
   # Rastrear sesión activa del cliente para el indicador ▶ en el sidebar
   tmux set-hook -ga client-session-changed "run-shell '$PLUGIN_DIR/scripts/track-session.sh'"
+  # Recuperar sidebar muerto al cambiar de ventana o sesión
+  tmux set-hook -ga after-select-window    "run-shell '$PLUGIN_DIR/scripts/recover-sidebar.sh'"
+  tmux set-hook -ga client-session-changed "run-shell '$PLUGIN_DIR/scripts/recover-sidebar.sh'"
   # Cuando el pane sidebar es resizeado, actualizar el sidebar server con el nuevo ancho.
   # Necesario porque window-size manual impide que los clientes cambien el tamaño solos.
   # Resize del pane sidebar → actualizar sidebar server con el nuevo ancho.

@@ -22,7 +22,7 @@ TARGET_SRV="${TARGET%%|*}"
 _rest="${TARGET#*|}"
 TARGET_SESS="${_rest%%|*}"
 TARGET_WIN="${_rest#*|}"
-[[ "$TARGET_WIN" == "$TARGET_SESS" ]] && TARGET_WIN=""
+if [[ "$TARGET_WIN" == "$TARGET_SESS" ]]; then TARGET_WIN=""; fi
 
 # Click en sesión sin ventana: no navegar (solo las ventanas redirigen)
 [[ -z "$TARGET_WIN" ]] && exit 0
@@ -48,8 +48,8 @@ _tmux_target="$TARGET_SESS"
 # Normalizar el ancho del sidebar destino ANTES del switch para evitar el flash visual
 if [[ -n "$TARGET_WIN" && "$TARGET_SRV" == "$CURRENT_SERVER" && -n "$_src_w" ]]; then
   _dest_live=$($TMUXBIN list-panes -t "${TARGET_SESS}:${TARGET_WIN}" \
-    -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-    | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}') || true
+    -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+    | awk -F'|' '$1!="1" && $3=="Sessions" && $4=="tmux" {print $2; exit}') || true
   [[ -n "$_dest_live" ]] && $TMUXBIN resize-pane -t "$_dest_live" -x "$_src_w" 2>/dev/null || true
 fi
 
@@ -85,12 +85,13 @@ printf '%s' "${TARGET_SRV}|${DEST_SESS}:${DEST_WIN}" >"${STATE_DIR}/just_visited
 
 # Detectar sidebar en destino por título
 LIVE_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
-  -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-  | awk -F'|' '$1!="1" && $3=="Sessions" {print $2; exit}') || true
+  -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+  | awk -F'|' '$1!="1" && $3=="Sessions" && $4=="tmux" {print $2; exit}') || true
 
+# Pane muerto o zombie (vivo pero sin tmux corriendo — perdió conexión al server)
 DEAD_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
-  -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-  | awk -F'|' '$1=="1" && $3=="Sessions" {print $2; exit}') || true
+  -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+  | awk -F'|' '$3=="Sessions" && ($1=="1" || $4!="tmux") {print $2; exit}') || true
 
 # Verificar que LIVE_PANE tiene el sidebar server activo y sidebar.sh corriendo
 if [[ -n "$LIVE_PANE" ]]; then
@@ -128,14 +129,15 @@ bash "$PLUGIN_DIR/scripts/server-start.sh"
 
 _dedup_sessions_panes() {
   local _win="$1" _keep="$2"
-  [[ -z "$_keep" ]] && return
+  if [[ -z "$_keep" ]]; then return 0; fi
   local _extras _dup
   _extras=$($TMUXBIN list-panes -t "$_win" \
     -F '#{pane_id}|#{pane_title}' 2>/dev/null \
-    | awk -F'|' -v keep="$_keep" '$2=="Sessions" && $1!=keep {print $1}')
+    | awk -F'|' -v keep="$_keep" '$2=="Sessions" && $1!=keep {print $1}') || true
   while IFS= read -r _dup; do
-    [[ -n "$_dup" ]] && $TMUXBIN kill-pane -t "$_dup" 2>/dev/null
+    [[ -n "$_dup" ]] && $TMUXBIN kill-pane -t "$_dup" 2>/dev/null || true
   done <<<"$_extras"
+  return 0
 }
 
 if [[ -n "$DEAD_PANE" ]]; then
@@ -153,7 +155,7 @@ LEFTMOST_PANE=$($TMUXBIN list-panes -t "$DEST_SESS:$DEST_WIN" \
   | sort -t'|' -k1 -n | head -1 | cut -d'|' -f2) || true
 
 _target="$DEST_SESS:$DEST_WIN"
-[[ -n "$LEFTMOST_PANE" ]] && _target="$LEFTMOST_PANE"
+if [[ -n "$LEFTMOST_PANE" ]]; then _target="$LEFTMOST_PANE"; fi
 
 $TMUXBIN split-window -hb -l "$SIDEBAR_W" -t "$_target" \
   "exec $TMUXBIN -L $SERVER attach-session -t $SESSION" || true

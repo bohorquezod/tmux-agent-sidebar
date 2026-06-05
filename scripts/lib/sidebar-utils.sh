@@ -29,8 +29,8 @@ _ensure_sidebar() {
 
   local _live
   _live=$("${OUTER_TMUX[@]}" list-panes -t "$_dest" \
-    -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-    | awk -F'|' '$1!="1" && $3=="Sessions"{print $2; exit}')
+    -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+    | awk -F'|' '$1!="1" && $3=="Sessions" && $4=="tmux"{print $2; exit}')
   if [[ -n "$_live" ]]; then
     _log_info "_ensure_sidebar: reusing live pane=$_live"
     local _live_w
@@ -45,9 +45,10 @@ _ensure_sidebar() {
   bash "$PLUGIN_DIR/scripts/server-start.sh" 2>/dev/null
 
   local _dead
+  # Muerto o zombie (vivo pero sin tmux — perdió conexión al server)
   _dead=$("${OUTER_TMUX[@]}" list-panes -t "$_dest" \
-    -F '#{pane_dead}|#{pane_id}|#{pane_title}' 2>/dev/null \
-    | awk -F'|' '$1=="1" && $3=="Sessions"{print $2; exit}')
+    -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+    | awk -F'|' '$3=="Sessions" && ($1=="1" || $4!="tmux"){print $2; exit}')
 
   if [[ -n "$_dead" ]]; then
     _log_info "_ensure_sidebar: respawning dead pane=$_dead"
