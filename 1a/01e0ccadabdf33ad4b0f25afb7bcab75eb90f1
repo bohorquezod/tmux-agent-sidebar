@@ -1,0 +1,40 @@
+tmux-agent-sidebar.tmux
+  s_f3fa1c19aaf8b4::t_c0f84f1ac64585 43-44,50-52
+scripts/toggle.sh
+  s_f3fa1c19aaf8b4::t_4acd4a9d0586a1 21-22,24,26-27
+scripts/recover-sidebar.sh
+  s_f3fa1c19aaf8b4::t_9655feed05f673 3-33
+scripts/lib/sidebar-utils.sh
+  s_f3fa1c19aaf8b4::t_7f29b720f4e461 48,50-51
+  s_f3fa1c19aaf8b4::t_fc21ad976478ab 32-33
+scripts/click.sh
+  s_f3fa1c19aaf8b4::t_8bdf9fdf441ee5 88-89,91,93-94
+  s_5524dd983565bb::t_1859ac7f365513 132,136,138,140
+  s_5524dd983565bb::t_ba51d80ea63d82 158
+  s_5524dd983565bb::t_fb89c77e148971 25
+  s_f3fa1c19aaf8b4::t_c0542befc83c07 51-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1a01e0ccadabdf33ad4b0f25afb7bcab75eb90f1",
+  "prompts": {},
+  "sessions": {
+    "s_5524dd983565bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7d65c992-6d9d-4eba-b509-b1beab5e22d4",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_f3fa1c19aaf8b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5c3db9d4-bd97-406c-b713-a2ac2c30b4fd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
