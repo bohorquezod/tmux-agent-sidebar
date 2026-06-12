@@ -68,7 +68,7 @@ fi
 HEIGHT=$($TMUXBIN list-panes -a -F '#{pane_title}|#{pane_height}' 2>/dev/null \
   | awk -F'|' '$1=="Sessions"{print $2; exit}')
 if [[ -z "$HEIGHT" || ! "$HEIGHT" =~ ^[0-9]+$ ]]; then
-  HEIGHT=$(stty size 2>/dev/null | awk '{print $1}')
+  HEIGHT=$(stty size 2>/dev/null | awk '{print $1}') || true
   [[ -z "$HEIGHT" || ! "$HEIGHT" =~ ^[0-9]+$ ]] && HEIGHT=50
 fi
 $TMUXBIN -L "$SERVER" -f /dev/null new-session -d -s "$SESSION" -x "$WIDTH" -y "$HEIGHT" \
