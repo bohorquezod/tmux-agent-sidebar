@@ -48,12 +48,12 @@ teardown() {
   [ "${#SESSIONS_FLAT[@]}" = "0" ]
 }
 
-@test "_sessions_sort_alpha: sessions across different servers sort by session name" {
+@test "_sessions_sort_alpha: sessions across different servers sort by server then session name" {
   SESSIONS_FLAT=("srv1|zebra" "srv2|apple" "srv1|cherry")
   _sessions_sort_alpha
-  [ "${SESSIONS_FLAT[0]}" = "srv2|apple" ]
-  [ "${SESSIONS_FLAT[1]}" = "srv1|cherry" ]
-  [ "${SESSIONS_FLAT[2]}" = "srv1|zebra" ]
+  [ "${SESSIONS_FLAT[0]}" = "srv1|cherry" ]
+  [ "${SESSIONS_FLAT[1]}" = "srv1|zebra" ]
+  [ "${SESSIONS_FLAT[2]}" = "srv2|apple" ]
 }
 
 # ── _windows_sort_alpha ───────────────────────────────────────────────────────

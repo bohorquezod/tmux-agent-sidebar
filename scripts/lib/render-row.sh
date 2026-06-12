@@ -9,7 +9,7 @@
 # Appends one session row (plus server header when the server changes) to buf/mapbuf.
 # Reads globals: buf mapbuf prev_server W max _sess_num _ii SELECTED _CMD_BUF
 #   _cursor_parent_item _KILL_PENDING OUTER_SERVER _cur_sess _sess_act _srv_cur
-#   _drill_mode R GR YL WH BG RD CY
+#   _last_sess _drill_mode R GR YL WH BG RD CY
 render_session_row() {
   local _rsr_item="$1" _rsr_srv="$2" _rsr_sess="$3"
 
@@ -20,9 +20,8 @@ render_session_row() {
         buf+=$'\n'
         mapbuf+=$'\n'
       }
-      local _is_cur="${_srv_cur[$_rsr_srv]:-0}"
       local _sic="$GR"
-      [[ "$_is_cur" == "1" ]] && _sic="$CY"
+      [[ "$_rsr_srv" == "$OUTER_SERVER" ]] && _sic="$CY"
       local _srvd="${_rsr_srv:0:$max}"
       [[ ${#_rsr_srv} -gt $max ]] && _srvd="${_rsr_srv:0:$((max - 1))}…"
       local _fill_len=$((W - 4 - ${#_srvd}))
@@ -34,12 +33,17 @@ render_session_row() {
     prev_server="$_rsr_srv"
   fi
 
-  # Active indicator: ▶ marks the session this sidebar client is watching
-  local _is_act=0
+  # Active indicator:
+  #   ▶ bright green = you are HERE (current server, current session)
+  #   ▶ gray        = you were here last (other server, remembered via click)
+  local _is_act=0  # 1 = current server
+  local _is_prev=0 # 1 = other server, last-visited session
   if [[ "$_rsr_srv" == "$OUTER_SERVER" ]]; then
     [[ "$_rsr_sess" == "$_cur_sess" ]] && _is_act=1
   else
-    _is_act="${_sess_act["${_rsr_srv}|${_rsr_sess}"]:-0}"
+    local _lk="${_rsr_srv//[^a-zA-Z0-9_-]/_}"
+    local _last="${_last_sess[$_lk]:-}"
+    [[ -n "$_last" && "$_rsr_sess" == "$_last" ]] && _is_prev=1
   fi
 
   local _cursor=" " _ic="$GR" _nc=""
@@ -51,6 +55,10 @@ render_session_row() {
     _cursor="▶"
     _nc="$BG"
     [[ $_ii -eq $SELECTED ]] && _ic="$YL" || _ic="$BG"
+  elif [[ "$_is_prev" == "1" ]]; then
+    _cursor="▶"
+    _nc="$GR"
+    [[ $_ii -eq $SELECTED ]] && _ic="$YL" || _ic="$GR"
   fi
   [[ -n "$_cursor_parent_item" && "$_rsr_item" == "$_cursor_parent_item" ]] && _nc="$WH"
   [[ -n "$_KILL_PENDING" && "$_rsr_item" == "$_KILL_PENDING" ]] && {
@@ -82,7 +90,42 @@ render_window_row() {
   local _wname _wicon _wagent _islast _ptitle
   IFS='|' read -r _wname _wicon _wagent _islast _ptitle <<<"$_wmeta"
   [[ -z "$_wicon" ]] && _wicon="$STATE_EMPTY"
-  [[ -z "$_islast" ]] && _islast="1"
+  # Recompute is_last from ITEMS_FLAT so alpha sort and manual reorder stay correct
+  _islast="1"
+  local _peek _pitm _ptyp _pr _psrv _pr2 _psess _pwid _visible _pm _pic _pfk
+  _peek=$((_ii + 1))
+  while [[ $_peek -lt ${#ITEMS_FLAT[@]} ]]; do
+    _pitm="${ITEMS_FLAT[$_peek]}"
+    _ptyp="${_pitm%%|*}"
+    [[ "$_ptyp" == "S" ]] && break
+    if [[ "$_ptyp" == "W" ]]; then
+      _pr="${_pitm#*|}"
+      _psrv="${_pr%%|*}"
+      _pr2="${_pr#*|}"
+      _psess="${_pr2%%|*}"
+      _pwid="${_pr2#*|}"
+      if [[ "$_psrv" == "$_rwr_srv" && "$_psess" == "$_rwr_sess" ]]; then
+        _visible=1
+        if [[ -n "${_FILTER_STATUS:-}" ]]; then
+          _visible=0
+          _pm="${_win_meta["${_psrv}|${_psess}|${_pwid}"]:-}"
+          _pic="${_pm#*|}"
+          _pic="${_pic%%|*}"
+          _pfk="${_psrv//[^a-zA-Z0-9_-]/_}_${_psess//[^a-zA-Z0-9_-]/_}_${_pwid}"
+          case "$_FILTER_STATUS" in
+            working) [[ "$_pic" == "$STATE_WORKING" || "$_pic" == "$STATE_LOOP" ]] && _visible=1 ;;
+            idle) [[ "$_pic" != "$STATE_EMPTY" && "$_pic" != "$STATE_WORKING" && "$_pic" != "$STATE_LOOP" && ! -f "${STATE_DIR}/${_pfk}.unread" ]] && _visible=1 ;;
+            unread) [[ -f "${STATE_DIR}/${_pfk}.unread" ]] && _visible=1 ;;
+          esac
+        fi
+        [[ "$_visible" == "1" ]] && {
+          _islast="0"
+          break
+        }
+      fi
+    fi
+    ((_peek++)) || true
+  done
 
   # ── State computation ────────────────────────────────────────────────────────
   local _key="${_rwr_srv//[^a-zA-Z0-9_-]/_}_${_rwr_sess//[^a-zA-Z0-9_-]/_}_${_rwr_widx}"
@@ -112,8 +155,8 @@ render_window_row() {
   else
     local _pi=""
     [[ -f "$_prev_f" ]] && _pi=$(<"$_prev_f")
-    [[ "$_pi" == "W" && ("$_state" == "idle" || "$_state" == "blocked" || "$_state" == "loop") ]] && touch "$_flag_f"
-    [[ "$_state" == "working" ]] && rm -f "$_flag_f"
+    [[ "$_pi" == "$STATE_WORKING" && ("$_state" == "$STATE_IDLE" || "$_state" == "$STATE_BLOCKED" || "$_state" == "$STATE_LOOP") ]] && touch "$_flag_f"
+    [[ "$_state" == "$STATE_WORKING" ]] && rm -f "$_flag_f"
     printf '%s' "$_wicon" >"$_prev_f"
     [[ -f "$_flag_f" && "$_state" != "working" ]] && _state="unread"
   fi

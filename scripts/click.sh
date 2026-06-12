@@ -29,7 +29,7 @@ if [[ "$TARGET_WIN" == "$TARGET_SESS" ]]; then TARGET_WIN=""; fi
 
 CURRENT_SERVER="${TMUX%%,*}"
 CURRENT_SERVER="${CURRENT_SERVER##*/}"
-SOCKET_DIR="${TMPDIR:-/tmp}/tmux-$(id -u)"
+SOCKET_DIR="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
 
 # Capturar el ancho del sidebar en la ventana origen antes de navegar
 _src_sess=$($TMUXBIN display-message -p '#S' 2>/dev/null)
@@ -56,15 +56,56 @@ fi
 if [[ "$TARGET_SRV" == "$CURRENT_SERVER" ]]; then
   $TMUXBIN switch-client -t "$_tmux_target" 2>/dev/null || exit 0
 else
-  $TMUXBIN -S "$SOCKET_DIR/$TARGET_SRV" switch-client -t "$_tmux_target" 2>/dev/null || exit 0
+  # Garantizar sidebar server activo antes de crear pane en destino
+  bash "$PLUGIN_DIR/scripts/server-start.sh"
+
+  # Crear sidebar pane en la ventana destino antes de cambiar de servidor
+  _CTMUX=("$TMUXBIN" -S "$SOCKET_DIR/$TARGET_SRV")
+  _tgt_key="${TARGET_SRV//[^a-zA-Z0-9_-]/_}"
+  _tgt_w=$(cat "${STATE_DIR}/sidebar_width_${_tgt_key}" 2>/dev/null)
+  [[ -z "$_tgt_w" || ! "$_tgt_w" =~ ^[0-9]+$ ]] && _tgt_w="${_src_w:-}"
+  [[ -z "$_tgt_w" || ! "$_tgt_w" =~ ^[0-9]+$ ]] && _tgt_w=$($TMUXBIN show-option -gqv @agent-sidebar-width 2>/dev/null)
+  [[ -z "$_tgt_w" || ! "$_tgt_w" =~ ^[0-9]+$ ]] && _tgt_w=28
+  _dest_live_x=$("${_CTMUX[@]}" list-panes -t "${TARGET_SESS}:${TARGET_WIN}" \
+    -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+    | awk -F'|' '$1!="1" && $3=="Sessions" && $4=="tmux" {print $2; exit}') || true
+  _dest_dead_x=$("${_CTMUX[@]}" list-panes -t "${TARGET_SESS}:${TARGET_WIN}" \
+    -F '#{pane_dead}|#{pane_id}|#{pane_title}|#{pane_current_command}' 2>/dev/null \
+    | awk -F'|' '$3=="Sessions" && ($1=="1" || $4!="tmux") {print $2; exit}') || true
+  if [[ -n "$_dest_live_x" ]]; then
+    "${_CTMUX[@]}" resize-pane -t "$_dest_live_x" -x "$_tgt_w" 2>/dev/null || true
+  elif [[ -n "$_dest_dead_x" ]]; then
+    "${_CTMUX[@]}" respawn-pane -t "$_dest_dead_x" -k \
+      "exec $TMUXBIN -L $SERVER attach-session -t $SESSION" 2>/dev/null || true
+    "${_CTMUX[@]}" select-pane -t "$_dest_dead_x" -T "Sessions" 2>/dev/null || true
+  else
+    _lmost_x=$("${_CTMUX[@]}" list-panes -t "${TARGET_SESS}:${TARGET_WIN}" \
+      -F '#{pane_left}|#{pane_id}' 2>/dev/null \
+      | sort -t'|' -k1 -n | head -1 | cut -d'|' -f2) || true
+    _splittgt_x="${TARGET_SESS}:${TARGET_WIN}"
+    [[ -n "$_lmost_x" ]] && _splittgt_x="$_lmost_x"
+    _new_x=$("${_CTMUX[@]}" split-window -hb -l "$_tgt_w" -t "$_splittgt_x" -P -F '#{pane_id}' \
+      "exec $TMUXBIN -L $SERVER attach-session -t $SESSION" 2>/dev/null) || true
+    [[ -n "$_new_x" ]] && "${_CTMUX[@]}" select-pane -t "$_new_x" -T "Sessions" 2>/dev/null || true
+  fi
+
+  # Navegar: switch-client si ya hay cliente adjunto, sino detach+attach
+  if ! "${_CTMUX[@]}" switch-client -t "$_tmux_target" 2>/dev/null; then
+    $TMUXBIN detach-client -E \
+      "exec $TMUXBIN -S \"$SOCKET_DIR/$TARGET_SRV\" attach-session -t \"$_tmux_target\"" 2>/dev/null || true
+  fi
 fi
 
-# Escribir current_session directamente para re-render inmediato del sidebar.
-# No esperar al hook client-session-changed (que no dispara cuando solo cambia la ventana).
+# Recordar qué sesión se dejó en el servidor origen (para ▶ en servidores no-activos).
+if [[ "$TARGET_SRV" != "$CURRENT_SERVER" && -n "$_src_sess" ]]; then
+  printf '%s' "$_src_sess" >"${STATE_DIR}/last_session_${CURRENT_SERVER//[^a-zA-Z0-9_-]/_}"
+fi
+
+# Escribir current_session y current_server para re-render inmediato del sidebar.
 [[ -n "$TARGET_SESS" ]] && printf '%s' "$TARGET_SESS" >"${STATE_DIR}/current_session"
+printf '%s' "$TARGET_SRV" >"${STATE_DIR}/current_server"
 
 # Despertar el read -n1 de sidebar.sh enviando un carácter invisible directo al pane.
-# send-keys garantiza retorno inmediato del read (las señales no interrumpen ptys en macOS).
 $TMUXBIN -L "$SERVER" send-keys -t "$SESSION" $'\x1e' 2>/dev/null
 
 # Solo gestionar sidebar en el servidor actual

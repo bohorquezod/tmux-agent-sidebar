@@ -92,7 +92,7 @@ current_server_name() {
 build_data() {
   local _current _socket_dir _buf _servers
   _current=$(current_server_name)
-  _socket_dir="${TMPDIR:-/tmp}/tmux-$(id -u)"
+  _socket_dir="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
   _buf=""
   _BUILD_TMPDIR=$(mktemp -d)
   _servers=("$_current")

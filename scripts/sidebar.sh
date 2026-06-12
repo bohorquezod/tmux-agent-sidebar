@@ -33,7 +33,7 @@ ORDER_FILE="${HOME}/.tmux-sidebar-order"
 mkdir -p "$STATE_DIR" "$CLIENTS_DIR"
 
 PANE_ID="$TMUX_PANE"
-SOCKET_DIR="${TMPDIR:-/tmp}/tmux-$(id -u)"
+SOCKET_DIR="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
 
 # ── Detectar contexto: sidebar server vs standalone ───────────────────────────
 if [[ -n "$OUTER_TMUX_SOCKET" ]]; then

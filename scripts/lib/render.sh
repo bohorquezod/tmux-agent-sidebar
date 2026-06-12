@@ -18,12 +18,12 @@ WH=$'\033[1;37m'
 
 file_mtime() { stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
-# Sorts SESSIONS_FLAT in-place by session name (alpha order)
+# Sorts SESSIONS_FLAT in-place: primary by server, secondary by session name
 _sessions_sort_alpha() {
   [[ ${#SESSIONS_FLAT[@]} -le 1 ]] && return
   local _sorted=()
   while IFS= read -r _e; do [[ -n "$_e" ]] && _sorted+=("$_e"); done \
-    < <(printf '%s\n' "${SESSIONS_FLAT[@]}" | sort -t'|' -k2)
+    < <(printf '%s\n' "${SESSIONS_FLAT[@]}" | sort -t'|' -k1,1 -k2,2)
   SESSIONS_FLAT=("${_sorted[@]}")
 }
 
@@ -44,6 +44,7 @@ _windows_sort_alpha() {
 }
 
 # ── Differential rendering state ─────────────────────────────────────────────
+declare -A _last_sess # server_key → last session visited on that server (written by click.sh)
 declare -a _DIFF_LINES=()
 _DIFF_W=0
 _DIFF_H=0
@@ -249,6 +250,13 @@ render() {
   # Resolver sesión y ventana activa del outer server en este ciclo de render
   # _outer_sess and _outer_win are globals so render_window_row can read them
   _outer_sess=$(cat "${STATE_DIR}/current_session" 2>/dev/null)
+  # Actualizar OUTER_SERVER/OUTER_TMUX si el usuario navegó a otro servidor
+  local _cur_srv
+  _cur_srv=$(cat "${STATE_DIR}/current_server" 2>/dev/null) || true
+  if [[ -n "$_cur_srv" && "$_cur_srv" != "$OUTER_SERVER" && -n "${SOCKET_DIR:-}" ]]; then
+    OUTER_SERVER="$_cur_srv"
+    OUTER_TMUX=("$TMUXBIN" -S "$SOCKET_DIR/$_cur_srv")
+  fi
   _outer_win=""
   local _df_mtime
   _df_mtime=$(file_mtime "$DATA_FILE")
@@ -321,7 +329,28 @@ render() {
           _found=true
           break
         }; done
-        [[ "$_found" == false ]] && SESSIONS_FLAT+=("$_d")
+        if [[ "$_found" == false ]]; then
+          local _dsrv2="${_d%%|*}" _ins_i=${#SESSIONS_FLAT[@]} _ii2
+          for _ii2 in "${!SESSIONS_FLAT[@]}"; do
+            [[ "${SESSIONS_FLAT[$_ii2]%%|*}" == "$_dsrv2" ]] && _ins_i=$((_ii2 + 1))
+          done
+          SESSIONS_FLAT=("${SESSIONS_FLAT[@]:0:$_ins_i}" "$_d" "${SESSIONS_FLAT[@]:$_ins_i}")
+        fi
+      done
+      # Reagrupar sesiones que driftearon en el ORDER_FILE (mismo server, no contiguas)
+      local -A _smap_g=()
+      local _srv_g _sorder_g=() _sg _line_g
+      for _sg in "${SESSIONS_FLAT[@]}"; do
+        _srv_g="${_sg%%|*}"
+        if [[ -z "${_smap_g[$_srv_g]+x}" ]]; then
+          _sorder_g+=("$_srv_g")
+          _smap_g[$_srv_g]=""
+        fi
+        _smap_g[$_srv_g]+="${_sg}"$'\n'
+      done
+      SESSIONS_FLAT=()
+      for _srv_g in "${_sorder_g[@]}"; do
+        while IFS= read -r _line_g; do [[ -n "$_line_g" ]] && SESSIONS_FLAT+=("$_line_g"); done <<<"${_smap_g[$_srv_g]}"
       done
     else
       # Merge cuando hay diferencia de count O de contenido (sesión reemplazada con mismo count)
@@ -357,7 +386,13 @@ render() {
             _found=true
             break
           }; done
-          [[ "$_found" == false ]] && _merged+=("$_d")
+          if [[ "$_found" == false ]]; then
+            local _dsrv3="${_d%%|*}" _ins_j=${#_merged[@]} _jj
+            for _jj in "${!_merged[@]}"; do
+              [[ "${_merged[$_jj]%%|*}" == "$_dsrv3" ]] && _ins_j=$((_jj + 1))
+            done
+            _merged=("${_merged[@]:0:$_ins_j}" "$_d" "${_merged[@]:$_ins_j}")
+          fi
         done
         SESSIONS_FLAT=("${_merged[@]}")
       fi
@@ -484,6 +519,16 @@ render() {
   [[ $SELECTED -lt 0 ]] && SELECTED=0
 
   _cur_sess="${_outer_sess:-}"
+
+  # Cargar última sesión conocida por servidor (escrita por click.sh al salir de un servidor).
+  # Determina qué sesión muestra ▶ en servidores donde el usuario ya no está.
+  _last_sess=()
+  local _lsf _lsk
+  for _lsf in "${STATE_DIR}"/last_session_*; do
+    [[ -f "$_lsf" ]] || continue
+    _lsk="${_lsf##*/last_session_}"
+    _last_sess["$_lsk"]=$(<"$_lsf")
+  done
 
   # ── Precalcular conteos para el footer de estado ─────────────────────────
   local _wc=0 _uc=0 _ic_raw=0 _ec=0 _pc=0 _lc=0 _xc=0
