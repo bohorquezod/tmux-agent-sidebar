@@ -1,0 +1,19 @@
+scripts/server-start.sh
+  s_13bd81db15c943::t_9fc1080e3cfdeb 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ee4e7cf37a36abfbdc2ee0894519d381edb3e219",
+  "prompts": {},
+  "sessions": {
+    "s_13bd81db15c943": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e044acdd-0e8f-4c28-8396-7d57492bc315",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
