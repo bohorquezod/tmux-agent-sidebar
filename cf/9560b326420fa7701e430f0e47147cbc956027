@@ -1,0 +1,70 @@
+scripts/daemon.sh
+  s_39269a459b20ac::t_fb78822958a375 95
+scripts/click.sh
+  s_3786d3d2053367::t_97905121c6a29b 94
+  s_3786d3d2053367::t_a3fedbb5841437 59-93,95,104,106
+  s_7322404b6ca0e9::t_9b8dd5dfcea2e9 96
+  s_7322404b6ca0e9::t_e2ff2f0d4a11bd 32
+  s_a927cbf6609239::t_ee9b25361c57b4 99-101
+scripts/sidebar.sh
+  s_7322404b6ca0e9::t_d9d3d97bb89352 36
+scripts/lib/render.sh
+  s_3786d3d2053367::t_2630b5cddf1140 332-340,343-353
+  s_a927cbf6609239::t_445c7fdbda813f 523-532
+  s_3786d3d2053367::t_e9b43c0f5f5b2c 389-395
+  s_a927cbf6609239::t_012980d8b3e6e3 255
+  s_3786d3d2053367::t_b818b7b23738e2 341-342
+  s_3786d3d2053367::t_596a11324543f7 253-254,257-259
+  s_a927cbf6609239::t_f51a0adb66cf0c 256
+  s_a927cbf6609239::t_4b31da09b42d13 47
+tests/sort.bats
+  s_a927cbf6609239::t_8b48bb8a2317c5 51,54-56
+scripts/lib/render-row.sh
+  s_a927cbf6609239::t_0e195ada9e731d 39-40
+  s_3786d3d2053367::t_35fdc3a8da2761 93-128
+  s_a927cbf6609239::t_280916ffcd7b6a 158-159
+  s_a927cbf6609239::t_ae2072adf58cf6 12
+  s_a927cbf6609239::t_17b8361e1bbb93 44-45
+  s_a927cbf6609239::t_fc6c4297ee8fe3 24
+  s_a927cbf6609239::t_c8220a01607a11 36-38,46,58-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "cf9560b326420fa7701e430f0e47147cbc956027",
+  "prompts": {},
+  "sessions": {
+    "s_3786d3d2053367": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f81e5fad-5840-4a53-8625-955387c2b364",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_39269a459b20ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "22e49f39-49be-4bbd-b04b-b70b483f8e9b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_7322404b6ca0e9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b38957c6-ad8a-42ae-97cd-ed936986151c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    },
+    "s_a927cbf6609239": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e190c563-773b-457c-b3e5-726e83d46953",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Orlando Bohorquez <orlandodavid.01@gmail.com>"
+    }
+  }
+}
